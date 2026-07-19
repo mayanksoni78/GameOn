@@ -1,7 +1,20 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useEffect, useState } from 'react';
-import { Alert, Dimensions, ImageBackground, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-const { width, height } = Dimensions.get("window");
+import { BlurView } from 'expo-blur';
+import * as Haptics from 'expo-haptics';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Animated,
+  Dimensions,
+  ImageBackground,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+
+const { width } = Dimensions.get('window');
+
 const BLOCK_SHAPES = {
   Dot: [[1]],
   Square2x2: [[1, 1], [1, 1]],
@@ -30,37 +43,48 @@ const BLOCK_SHAPES = {
   T_r: [[0, 1], [1, 1], [0, 1]],
 };
 
-class Block{
-  constructor(shape,color){
+// Board cell size, shared by the grid and the drag ghost so the dragged
+// block lines up 1:1 with the board while it's being moved.
+const CELL_SIZE = Math.min(width / 10, 36);
+const CELL_GAP = 2;
+// Tray blocks are drawn smaller (they're just a preview until picked up).
+const TRAY_CELL = 16;
+// How far above the finger/cursor the block floats while dragging, so it
+// isn't hidden under the touch point on phones.
+const DRAG_LIFT = 70;
+
+const COLORS = {
+  panel: 'rgba(20, 10, 35, 0.55)',
+  panelBorder: 'rgba(180, 130, 255, 0.35)',
+  accent: '#b06bff',
+  accentGlow: '#00eaff',
+  validGhost: 'rgba(80, 255, 170, 0.55)',
+  invalidGhost: 'rgba(255, 70, 90, 0.55)',
+};
+
+const PALETTE = ['#ff5252', '#ff9800', '#ffeb3b', '#9c27b0', '#00bcd4', '#4caf50'];
+
+class Block {
+  constructor(shape, color) {
     this.shape = shape;
-    this.color=color;
+    this.color = color;
   }
 }
 
-class BlockGenerator{
+class BlockGenerator {
   constructor() {
-    const colors = [
-      "#ff5252", "#ff9800", "#ffeb3b","#9c27b0"
-    ];
-
-    this.allBlocks = Object.values(BLOCK_SHAPES).map(shape => {
-      const randomColor = colors[Math.floor(Math.random() * colors.length)];
-      return new Block(shape, randomColor);
-    });
-  }
-
-  getRandomBlock() {
-    const randomIndex = Math.floor(Math.random() * this.allBlocks.length);
-    return this.allBlocks[randomIndex];
+    this.shapes = Object.values(BLOCK_SHAPES);
   }
 
   getNewBlockSet() {
-    const blocksCopy = [...this.allBlocks];
-    for (var i = blocksCopy.length - 1; i > 0; i--) {
+    const shapesCopy = [...this.shapes];
+    for (let i = shapesCopy.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [blocksCopy[i], blocksCopy[j]] = [blocksCopy[j], blocksCopy[i]];
+      [shapesCopy[i], shapesCopy[j]] = [shapesCopy[j], shapesCopy[i]];
     }
-    return blocksCopy.slice(0, 3);
+    return shapesCopy
+      .slice(0, 3)
+      .map((shape) => new Block(shape, PALETTE[Math.floor(Math.random() * PALETTE.length)]));
   }
 }
 
@@ -77,12 +101,12 @@ class Grid {
   }
 
   canPlaceBlock(block, startRow, startCol) {
-    for(let r = 0; r < block.shape.length; r++){
-      for(let c = 0; c < block.shape[r].length; c++){
-        if(block.shape[r][c] === 1){
+    for (let r = 0; r < block.shape.length; r++) {
+      for (let c = 0; c < block.shape[r].length; c++) {
+        if (block.shape[r][c] === 1) {
           const boardRow = startRow + r;
           const boardCol = startCol + c;
-          if(
+          if (
             boardRow < 0 || boardCol < 0 ||
             boardRow >= this.size || boardCol >= this.size ||
             this.matrix[boardRow][boardCol] !== null
@@ -94,10 +118,10 @@ class Grid {
     return true;
   }
 
-  placeBlock(block, startRow, startCol){
-    for(let r = 0; r < block.shape.length; r++){
-      for(let c = 0; c < block.shape[r].length; c++){
-        if(block.shape[r][c] === 1){
+  placeBlock(block, startRow, startCol) {
+    for (let r = 0; r < block.shape.length; r++) {
+      for (let c = 0; c < block.shape[r].length; c++) {
+        if (block.shape[r][c] === 1) {
           this.matrix[startRow + r][startCol + c] = { filled: true, color: block.color };
         }
       }
@@ -109,25 +133,14 @@ class Grid {
     const colsToClear = [];
 
     for (let r = 0; r < this.size; r++) {
-      if (this.matrix[r].every(cell => cell !== null)) {
-        rowsToClear.push(r);
-      }
+      if (this.matrix[r].every((cell) => cell !== null)) rowsToClear.push(r);
     }
-
     for (let c = 0; c < this.size; c++) {
-      if (this.matrix.every(row => row[c] !==null)) {
-        colsToClear.push(c);
-      }
+      if (this.matrix.every((row) => row[c] !== null)) colsToClear.push(c);
     }
-
-    for (const r of rowsToClear) {
-      this.matrix[r] = Array(this.size).fill(null);
-    }
-
+    for (const r of rowsToClear) this.matrix[r] = Array(this.size).fill(null);
     for (const c of colsToClear) {
-      for (let r = 0; r < this.size; r++) {
-        this.matrix[r][c] = null;
-      }
+      for (let r = 0; r < this.size; r++) this.matrix[r][c] = null;
     }
 
     return { clearedRows: rowsToClear.length, clearedCols: colsToClear.length };
@@ -139,50 +152,100 @@ function canAnyBlockBePlaced(grid, blocks) {
     if (!block) continue;
     for (let r = 0; r < grid.size; r++) {
       for (let c = 0; c < grid.size; c++) {
-        if (grid.canPlaceBlock(block, r, c)) {
-          return true;
-        }
+        if (grid.canPlaceBlock(block, r, c)) return true;
       }
     }
   }
   return false;
 }
 
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
 const blockGenerator = new BlockGenerator();
 
-const Cell = ({ value }) => {
-  if(!value) return <View style={[styles.cell, styles.emptyCell]} />;
-  return (
-    <View
-      style={[
-        styles.cell,
-        { backgroundColor: value.color }
-      ]}
-    />
-  );
+// Computes the top-left board cell a block should land on given a raw
+// finger/cursor position in page coordinates.
+function targetCellFor(block, pageX, pageY, gridOrigin, gridSize) {
+  const blockHeight = block.shape.length;
+  const blockWidth = block.shape[0].length;
+  const step = CELL_SIZE + CELL_GAP;
+
+  const ghostLeft = pageX - (blockWidth * step) / 2;
+  const ghostTop = pageY - DRAG_LIFT - (blockHeight * step) / 2;
+
+  let row = Math.round((ghostTop - gridOrigin.y) / step);
+  let col = Math.round((ghostLeft - gridOrigin.x) / step);
+
+  row = clamp(row, 0, gridSize - blockHeight);
+  col = clamp(col, 0, gridSize - blockWidth);
+
+  return { row, col };
+}
+
+const Cell = ({ value, preview }) => {
+  let style = [styles.cell, styles.emptyCell];
+  if (value) style = [styles.cell, { backgroundColor: value.color }];
+  if (preview) {
+    style = [
+      styles.cell,
+      styles.previewCell,
+      { backgroundColor: preview.valid ? COLORS.validGhost : COLORS.invalidGhost },
+    ];
+  }
+  return <View style={style} />;
 };
 
+const BlockShape = ({ shape, color, cellSize, gap = 1 }) => (
+  <View>
+    {shape.map((row, rowIndex) => (
+      <View key={rowIndex} style={{ flexDirection: 'row' }}>
+        {row.map((cellValue, colIndex) => (
+          <View
+            key={colIndex}
+            style={{
+              width: cellSize,
+              height: cellSize,
+              margin: gap,
+              borderRadius: 4,
+              backgroundColor: cellValue === 1 ? color : 'transparent',
+              borderWidth: cellValue === 1 ? 1 : 0,
+              borderColor: 'rgba(0,0,0,0.35)',
+            }}
+          />
+        ))}
+      </View>
+    ))}
+  </View>
+);
 
-const BlockComponent = ({ block, onSelect, isSelected }) => {
-  const wrapperStyle = isSelected ? [styles.blockWrapper, styles.selectedBlock] : styles.blockWrapper;
+// One draggable block in the tray. Uses react-native-gesture-handler's
+// Gesture.Pan, which (unlike PanResponder) properly captures the pointer on
+// web via native Pointer Events, so dragging doesn't drop out mid-move.
+const TrayBlockItem = ({ block, index, disabled, isBeingDragged, onDragStart, onDragMove, onDragEnd }) => {
+  const pan = Gesture.Pan()
+    .enabled(!disabled)
+    .shouldCancelWhenOutside(false)
+    .onBegin((e) => {
+      onDragStart(index, block, e.absoluteX, e.absoluteY);
+    })
+    .onUpdate((e) => {
+      onDragMove(block, e.absoluteX, e.absoluteY);
+    })
+    .onEnd((e) => {
+      onDragEnd(block, e.absoluteX, e.absoluteY);
+    })
+    .onFinalize((e, success) => {
+      if (!success) onDragEnd(block, e.absoluteX, e.absoluteY);
+    });
+
   return (
-    <TouchableOpacity onPress={onSelect} style={wrapperStyle} disabled={!onSelect}>
-      {block.shape.map((row, rowIndex) => (
-        <View key={rowIndex} style={styles.row}>
-          {row.map((cellValue, colIndex) => (
-            <View
-              key={colIndex}
-              style={[
-                styles.blockCell,
-                cellValue === 1
-                ? { backgroundColor: block.color, borderColor: '#000', borderWidth: 1 }
-                : styles.emptyBlockCell
-              ]}
-            />
-          ))}
-        </View>
-      ))}
-    </TouchableOpacity>
+    <GestureDetector gesture={pan}>
+      <View style={[styles.blockWrapper, isBeingDragged && { opacity: 0.25 }]}>
+        <BlockShape shape={block.shape} color={block.color} cellSize={TRAY_CELL} />
+      </View>
+    </GestureDetector>
   );
 };
 
@@ -190,10 +253,27 @@ const Blockoduko = () => {
   const [grid, setGrid] = useState(() => new Grid());
   const [availableBlocks, setAvailableBlocks] = useState(() => blockGenerator.getNewBlockSet());
   const [score, setScore] = useState(0);
-  const [selectedBlock, setSelectedBlock] = useState(null);
   const [isGameOver, setIsGameOver] = useState(false);
   const [multiplier, setMultiplier] = useState(1);
   const [highScore, setHighScore] = useState(0);
+
+  // Drag state: which tray block is being dragged, its live finger position,
+  // and the resulting board preview (target cell + whether it's valid).
+  const [dragging, setDragging] = useState(null); // { index, block, x, y }
+  const [preview, setPreview] = useState(null); // { row, col, valid }
+  const [toast, setToast] = useState(null);
+
+  const gridRef = useRef(null);
+  const gridOriginRef = useRef({ x: 0, y: 0 });
+  const toastTimer = useRef(null);
+  const gridStateRef = useRef(grid);
+  gridStateRef.current = grid;
+  const multiplierRef = useRef(multiplier);
+  multiplierRef.current = multiplier;
+
+  const multiplierAnim = useRef(new Animated.Value(1)).current;
+  const gameOverAnim = useRef(new Animated.Value(0)).current;
+  const dragScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     (async () => {
@@ -217,268 +297,390 @@ const Blockoduko = () => {
     }
   }, [grid, availableBlocks, isGameOver]);
 
+  useEffect(() => {
+    Animated.sequence([
+      Animated.timing(multiplierAnim, { toValue: 1.35, duration: 120, useNativeDriver: true }),
+      Animated.spring(multiplierAnim, { toValue: 1, friction: 4, useNativeDriver: true }),
+    ]).start();
+  }, [multiplier]);
+
+  useEffect(() => {
+    Animated.timing(gameOverAnim, {
+      toValue: isGameOver ? 1 : 0,
+      duration: 250,
+      useNativeDriver: true,
+    }).start();
+  }, [isGameOver]);
+
+  const showToast = (message) => {
+    setToast(message);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 1100);
+  };
+
+  const measureGrid = useCallback(() => {
+    if (!gridRef.current) return;
+    gridRef.current.measure((_x, _y, _w, _h, pageX, pageY) => {
+      gridOriginRef.current = { x: pageX, y: pageY };
+    });
+  }, []);
+
   const handleRestart = () => {
     setGrid(new Grid());
     setScore(0);
     setAvailableBlocks(blockGenerator.getNewBlockSet());
-    setSelectedBlock(null);
     setIsGameOver(false);
     setMultiplier(1);
+    setDragging(null);
+    setPreview(null);
   };
 
-  const handleCellPress = (rowIndex, colIndex) => {
-    if (isGameOver || !selectedBlock) {
-      if (!selectedBlock && !isGameOver) {
-        Alert.alert("No Block Selected", "Please select a block from the bottom first.");
-      }
-      return;
-    }
+  const commitPlacement = (block, startRow, startCol) => {
+    const newGrid = gridStateRef.current.clone();
+    newGrid.placeBlock(block, startRow, startCol);
 
-    const blockHeight = selectedBlock.shape.length;
-    const blockWidth = selectedBlock.shape[0].length;
+    const blockCells = block.shape.flat().reduce((sum, cell) => sum + cell, 0);
+    let scoreToAdd = blockCells;
 
-    let startRow = rowIndex - Math.floor(blockHeight / 2);
-    let startCol = colIndex - Math.floor(blockWidth / 2);
+    const { clearedRows, clearedCols } = newGrid.clearFullLines();
+    const currentMultiplier = multiplierRef.current;
 
-    startRow = Math.max(0, Math.min(grid.size - blockHeight, startRow));
-    startCol = Math.max(0, Math.min(grid.size - blockWidth, startCol));
-
-    if (grid.canPlaceBlock(selectedBlock, startRow, startCol)) {
-      const newGrid = grid.clone();
-      newGrid.placeBlock(selectedBlock, startRow, startCol);
-
-      const blockCells = selectedBlock.shape.flat().reduce((sum, cell) => sum + cell, 0);
-      let scoreToAdd = blockCells;
-
-      const { clearedRows, clearedCols } = newGrid.clearFullLines();
-
-      if (clearedRows > 0 || clearedCols > 0) {
-        const lineClearBonus = (clearedRows + clearedCols + multiplier) * 9;
-        scoreToAdd += lineClearBonus;
-
-        const newMultiplier = multiplier + clearedRows + clearedCols;
-        setMultiplier(newMultiplier);
-      } else setMultiplier(1);
-
-      setScore(prev => prev + scoreToAdd);
-
-      setGrid(newGrid);
-
-      const remainingBlocks = availableBlocks.filter(b => b !== selectedBlock);
-      setSelectedBlock(null);
-
-      if (remainingBlocks.length === 0) {
-        setAvailableBlocks(blockGenerator.getNewBlockSet());
-      } else {
-        setAvailableBlocks(remainingBlocks);
-      }
+    if (clearedRows > 0 || clearedCols > 0) {
+      scoreToAdd += (clearedRows + clearedCols + currentMultiplier) * 9;
+      setMultiplier(currentMultiplier + clearedRows + clearedCols);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     } else {
-      Alert.alert("Invalid Move", "Cannot place the block here.");
+      setMultiplier(1);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     }
+
+    setScore((prev) => prev + scoreToAdd);
+    setGrid(newGrid);
+
+    setAvailableBlocks((prev) => {
+      const remaining = prev.filter((b) => b !== block);
+      return remaining.length === 0 ? blockGenerator.getNewBlockSet() : remaining;
+    });
   };
+
+  const handleDragStart = useCallback(
+    (index, block, x, y) => {
+      measureGrid();
+      setDragging({ index, block, x, y });
+      Animated.spring(dragScale, { toValue: 1.08, useNativeDriver: true, friction: 5 }).start();
+      Haptics.selectionAsync().catch(() => {});
+    },
+    [measureGrid, dragScale]
+  );
+
+  const handleDragMove = useCallback((block, x, y) => {
+    setDragging((prev) => (prev ? { ...prev, x, y } : prev));
+    const { row, col } = targetCellFor(block, x, y, gridOriginRef.current, gridStateRef.current.size);
+    const valid = gridStateRef.current.canPlaceBlock(block, row, col);
+    setPreview({ row, col, valid });
+  }, []);
+
+  const handleDragEnd = useCallback(
+    (block, x, y) => {
+      const { row, col } = targetCellFor(block, x, y, gridOriginRef.current, gridStateRef.current.size);
+
+      if (gridStateRef.current.canPlaceBlock(block, row, col)) {
+        commitPlacement(block, row, col);
+      } else {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+        showToast("Can't fit there");
+      }
+
+      Animated.spring(dragScale, { toValue: 1, useNativeDriver: true, friction: 5 }).start();
+      setDragging(null);
+      setPreview(null);
+    },
+    [dragScale]
+  );
+
+  const previewForCell = (row, col) => {
+    if (!preview || !dragging) return null;
+    const { block } = dragging;
+    const r = row - preview.row;
+    const c = col - preview.col;
+    if (r < 0 || c < 0 || r >= block.shape.length || c >= block.shape[0].length) return null;
+    if (block.shape[r][c] !== 1) return null;
+    return { valid: preview.valid };
+  };
+
+  const step = CELL_SIZE + CELL_GAP;
+  const ghostBlock = dragging?.block;
+  const ghostLeft = dragging ? dragging.x - (ghostBlock.shape[0].length * step) / 2 : 0;
+  const ghostTop = dragging ? dragging.y - DRAG_LIFT - (ghostBlock.shape.length * step) / 2 : 0;
 
   return (
     <ImageBackground
-      source={require("../assets/images/background_main.png")}
+      source={require('../assets/images/background_main.png')}
       style={styles.bg}
       resizeMode="cover"
     >
       <View style={styles.container}>
-
         <Text style={styles.title}>Blockodoku</Text>
 
-        <View style={styles.scoreContainer}>
-  <View style={styles.scoreRow}>
-    <Text style={styles.score}>Score: {score}</Text>
-    <Text style={styles.highScore}>High Score: {highScore}</Text>
-  </View>
+        <View style={styles.scorePanel}>
+          <View style={styles.scoreRow}>
+            <Text style={styles.score}>Score{'\n'}{score}</Text>
+            <Animated.Text style={[styles.multiplier, { transform: [{ scale: multiplierAnim }] }]}>
+              {multiplier}x
+            </Animated.Text>
+            <Text style={styles.highScore}>Best{'\n'}{highScore}</Text>
+          </View>
+        </View>
 
-  <Text style={styles.multiplier}>Multiplier: {multiplier}x</Text>
-</View>
-
-        <View>
+        <View
+          ref={gridRef}
+          onLayout={measureGrid}
+          style={styles.gridPanel}
+          collapsable={false}
+        >
           {grid.matrix.map((row, rowIndex) => (
             <View key={rowIndex} style={styles.row}>
               {row.map((cellValue, colIndex) => (
-                <TouchableOpacity
+                <Cell
                   key={colIndex}
-                  onPress={() => handleCellPress(rowIndex, colIndex)}
-                  disabled={isGameOver}
-                >
-                  <Cell value={cellValue} />
-                </TouchableOpacity>
+                  value={cellValue}
+                  preview={previewForCell(rowIndex, colIndex)}
+                />
               ))}
             </View>
           ))}
         </View>
 
-        <Text style={styles.instructions}>Select a block, then tap the grid to place it.</Text>
+        <Text style={styles.instructions}>
+          {toast ? toast : 'Drag a block from the tray onto the board'}
+        </Text>
 
-        <View style={styles.blockContainer}>
+        <View style={styles.blockTray}>
           {availableBlocks.map((block, index) => (
-            <BlockComponent
+            <TrayBlockItem
               key={index}
               block={block}
-              isSelected={block === selectedBlock}
-              onSelect={!isGameOver ? () => setSelectedBlock(block) : null}
+              index={index}
+              disabled={isGameOver}
+              isBeingDragged={dragging?.index === index}
+              onDragStart={handleDragStart}
+              onDragMove={handleDragMove}
+              onDragEnd={handleDragEnd}
             />
           ))}
         </View>
 
-        {isGameOver && (
-          <View style={styles.gameOverOverlay}>
-            <Text style={styles.gameOverText}>Game Over</Text>
-            <Text style={styles.finalScoreText}>Final Score: {score}</Text>
-
-            <TouchableOpacity onPress={handleRestart} style={styles.restartButton}>
-              <Text style={styles.restartButtonText}>Play Again</Text>
-            </TouchableOpacity>
-          </View>
+        {dragging && (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.ghost,
+              { left: ghostLeft, top: ghostTop, transform: [{ scale: dragScale }] },
+            ]}
+          >
+            <BlockShape
+              shape={ghostBlock.shape}
+              color={ghostBlock.color}
+              cellSize={CELL_SIZE - CELL_GAP * 2}
+              gap={CELL_GAP / 2}
+            />
+          </Animated.View>
         )}
 
+        {isGameOver && (
+          <Animated.View style={[styles.gameOverOverlay, { opacity: gameOverAnim }]}>
+            <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+            <View style={styles.gameOverCard}>
+              <Text style={styles.gameOverText}>Game Over</Text>
+              <Text style={styles.finalScoreText}>Final Score: {score}</Text>
+              {score >= highScore && score > 0 && (
+                <Text style={styles.newBestText}>New Best!</Text>
+              )}
+              <TouchableOpacity onPress={handleRestart} style={styles.restartButton}>
+                <Text style={styles.restartButtonText}>Play Again</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        )}
       </View>
     </ImageBackground>
   );
 };
 
 const styles = StyleSheet.create({
-  bg: {
-    flex: 1,
-    width: "100%",
-    height: "100%",
-  },
+  bg: { flex: 1, width: '100%', height: '100%' },
 
-  container:{
+  container: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 20,
-    backgroundColor: "rgba(0,0,0,0.3)",  
+    backgroundColor: 'rgba(0,0,0,0.35)',
   },
 
   title: {
-  fontSize: 36,
-  fontWeight: 'bold',
-  color: "#ffffffff",
-  textShadowColor: '#9900ff',
-  textShadowOffset: { width: 0, height: 0 },
-  textShadowRadius: 12,
-  marginBottom: 10,
-},
-scoreRow: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  width: '100%',
-  paddingHorizontal: 20,
-  marginBottom: 8,
-},
-multiplier: {
-  fontSize: 16,
-  color: '#33cfffff',
-  fontWeight: 'bold',
-  textShadowColor: '#00eaffff',
-  textShadowOffset: { width: 0, height: 0 },
-  textShadowRadius: 10,
-  transform: [{ scale: 1.2 }],
-  textAlign: 'center',
-},
-score: {
-  fontSize: 16,
-  color: '#33cfffff',
-  fontWeight: 'bold',
-  textAlign: 'left',
-  textShadowColor: '#00eaffff',
-  textShadowOffset: { width: 0, height: 0 },
-  textShadowRadius: 10,
-  transform: [{ scale: 1.2 }],
-  minWidth: 120,
-  marginLeft: 16, 
-},
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    textShadowColor: '#9900ff',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 12,
+    marginBottom: 10,
+  },
 
-highScore: {
-  fontSize: 16,
-  color: '#33cfffff',
-  fontWeight: 'bold',
-  textAlign: 'right',
-  textShadowColor: '#00eaffff',
-  textShadowOffset: { width: 0, height: 0 },
-  textShadowRadius: 10,
-  transform: [{ scale: 1.2 }],
-  minWidth: 120,
-  marginRight: 16, 
-},
+  scorePanel: {
+    width: '100%',
+    borderRadius: 16,
+    backgroundColor: COLORS.panel,
+    borderWidth: 1,
+    borderColor: COLORS.panelBorder,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
 
+  scoreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
 
-  instructions: { marginTop: 20, fontSize: 16, color: '#eee' },
+  score: {
+    fontSize: 14,
+    color: COLORS.accentGlow,
+    fontWeight: 'bold',
+    textAlign: 'left',
+    lineHeight: 18,
+  },
+
+  highScore: {
+    fontSize: 14,
+    color: COLORS.accentGlow,
+    fontWeight: 'bold',
+    textAlign: 'right',
+    lineHeight: 18,
+  },
+
+  multiplier: {
+    fontSize: 22,
+    color: '#ffffff',
+    fontWeight: 'bold',
+    textShadowColor: COLORS.accent,
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 12,
+  },
+
+  instructions: {
+    marginTop: 14,
+    fontSize: 14,
+    color: '#eee',
+    minHeight: 18,
+  },
 
   row: { flexDirection: 'row' },
 
+  gridPanel: {
+    padding: 6,
+    borderRadius: 12,
+    backgroundColor: 'rgba(10, 0, 25, 0.4)',
+    borderWidth: 1,
+    borderColor: COLORS.panelBorder,
+  },
+
   cell: {
-  width: Math.min(width / 10, 36),
-  height: Math.min(width / 10, 36),
-  borderWidth: 1, borderColor: '#ccc' },
-  emptyCell: { backgroundColor: 'rgba(255,255,255,0.2)',
-   },
-  blockContainer: {
+    width: CELL_SIZE,
+    height: CELL_SIZE,
+    margin: CELL_GAP / 2,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+
+  emptyCell: { backgroundColor: 'rgba(255,255,255,0.08)' },
+
+  previewCell: {
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.6)',
+  },
+
+  blockTray: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     width: '100%',
-    paddingVertical: 20,
+    paddingVertical: 16,
     marginTop: 10,
-    height: 120,
-  },
-
-  blockWrapper: { padding: 2 },
-  selectedBlock: {
-    borderWidth: 2,
-    borderColor: '#00bcd4',
-    transform: [{ scale: 1.1 }],
-    borderRadius: 5,
-    backgroundColor: 'rgba(0, 188, 212, 0.2)'
-  },
-
-  blockCell: { width: 18, height: 18 },
-  emptyBlockCell: { backgroundColor: 'transparent' },
-  filledBlockCell: {
-    backgroundColor: '#9900ffff',
+    minHeight: 110,
+    borderRadius: 16,
+    backgroundColor: COLORS.panel,
     borderWidth: 1,
-    borderColor: '#6800aeff',
+    borderColor: COLORS.panelBorder,
+  },
+
+  blockWrapper: {
+    padding: 6,
+    borderRadius: 10,
+  },
+
+  ghost: {
+    position: 'absolute',
+    zIndex: 50,
+    shadowColor: '#000',
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
   },
 
   gameOverOverlay: {
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'center',
     alignItems: 'center',
   },
 
+  gameOverCard: {
+    paddingVertical: 30,
+    paddingHorizontal: 36,
+    borderRadius: 20,
+    backgroundColor: 'rgba(20, 10, 35, 0.85)',
+    borderWidth: 1,
+    borderColor: COLORS.panelBorder,
+    alignItems: 'center',
+  },
+
   gameOverText: {
-    fontSize: 48,
+    fontSize: 40,
     fontWeight: 'bold',
     color: 'white',
+    textShadowColor: COLORS.accent,
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 14,
   },
 
   finalScoreText: {
-    fontSize: 24,
+    fontSize: 22,
     color: 'white',
     marginTop: 10,
-    marginBottom: 30,
+  },
+
+  newBestText: {
+    fontSize: 16,
+    color: '#ffd54f',
+    fontWeight: 'bold',
+    marginTop: 6,
   },
 
   restartButton: {
-    backgroundColor: '#9900ffff',
-    paddingVertical: 15,
-    paddingHorizontal: 30,
-    borderRadius: 10,
+    marginTop: 24,
+    backgroundColor: COLORS.accent,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 12,
     elevation: 5,
   },
 
   restartButtonText: {
-    color: '#333',
-    fontSize: 20,
+    color: '#1a0330',
+    fontSize: 18,
     fontWeight: 'bold',
   },
 });
