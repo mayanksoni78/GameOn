@@ -1,32 +1,27 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, TextInput
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import Animated, {
-  useSharedValue, useAnimatedStyle, withSpring, withTiming,
-  withSequence, Easing
-} from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, withSequence } from 'react-native-reanimated';
 import { Colors, glassmorphism, elegantShadow } from '../src/theme/colors';
 import { Fonts, FontSize } from '../src/theme/typography';
 import { Spacing, Radius } from '../src/theme/spacing';
-import { AnimatedBackground } from '../src/components/AnimatedBackground';
+import { CyberBackground } from '../src/components/CyberBackground';
 import { GameHeader } from '../src/components/GameHeader';
 import { GameOverModal } from '../src/components/GameOverModal';
-import { screenWidth, screenHeight } from '../src/utils/dimensions';
+import { screenWidth } from '../src/utils/dimensions';
 import { tapLight, tapMedium, notifySuccess, notifyError } from '../src/utils/haptics';
-import { useKeyboard, KeyboardKey } from '../src/hooks/useKeyboard';
+import { useKeyboard } from '../src/hooks/useKeyboard';
 
-const ACCENT = '#00E5FF';
-const ACCENT2 = '#9013FE';
-const DANGER = '#FF1744';
-const SUCCESS = '#00E676';
-const WARNING = '#FFD600';
-
-type Difficulty = 'EASY' | 'MEDIUM' | 'HARD';
-type CellInfo = { val: number; isGiven: boolean; notes: Set<number>; isError: boolean };
-type BoardState = CellInfo[][];
+const ACCENT_BLUE = '#38BDF8';
+const ACCENT_PURPLE = '#A855F7';
+const BORDER_PURPLE = '#6B21A8';
+const DARK_BLUE_BG = '#080F1E';
+const PANEL_BG = 'rgba(17, 24, 45, 0.8)';
+const BOARD_BG = 'rgba(11, 15, 28, 0.95)';
+const DANGER = '#FB7185';
+const SUCCESS = '#34D399';
+const WARNING = '#FBBF24';
 
 const SEED_BOARD = [
   [5, 3, 4, 6, 7, 8, 9, 1, 2],
@@ -40,14 +35,9 @@ const SEED_BOARD = [
   [3, 4, 5, 2, 8, 6, 1, 7, 9],
 ];
 
-const DIFF_COLORS: Record<Difficulty, string> = { EASY: SUCCESS, MEDIUM: WARNING, HARD: DANGER };
+const DIFF_COLORS = { EASY: SUCCESS, MEDIUM: WARNING, HARD: ACCENT_PURPLE };
 
-// ── Segmented Control (inline) ─────────────────────────────────────────────
-function SegmentedControl<T extends string>({
-  options, labels, value, onChange, activeColor,
-}: {
-  options: T[]; labels: string[]; value: T; onChange: (v: T) => void; activeColor: string;
-}) {
+function SegmentedControl({ options, labels, value, onChange, activeColor }) {
   return (
     <View style={styles.segmented}>
       {options.map((opt, i) => {
@@ -62,15 +52,15 @@ function SegmentedControl<T extends string>({
                 borderColor: activeColor,
                 shadowColor: activeColor,
                 shadowOffset: { width: 0, height: 0 },
-                shadowOpacity: 0.6,
-                shadowRadius: 8,
-                elevation: 4,
+                shadowOpacity: 0.5,
+                shadowRadius: 6,
+                elevation: 3,
               }
             ]}
             onPress={() => { tapLight(); onChange(opt); }}
             activeOpacity={0.7}
           >
-            <Text style={[styles.segText, active && { color: activeColor, textShadowColor: activeColor, textShadowRadius: 10 }]}>
+            <Text style={[styles.segText, active && { color: activeColor, textShadowColor: activeColor, textShadowRadius: 8 }]}>
               {labels[i]}
             </Text>
           </TouchableOpacity>
@@ -80,24 +70,17 @@ function SegmentedControl<T extends string>({
   );
 }
 
-// ── Cell Component ─────────────────────────────────────────────────────────
-function SudokuCell({
-  cell, r, c, cellSize, isSelected, isHighlight, isRelated, onPress
-}: {
-  cell: CellInfo; r: number; c: number; cellSize: number;
-  isSelected: boolean; isHighlight: boolean; isRelated: boolean;
-  onPress: () => void;
-}) {
+function SudokuCell({ cell, r, c, cellSize, isSelected, isHighlight, isRelated, onPress }) {
   const scale = useSharedValue(1);
   const shake = useSharedValue(0);
 
   useEffect(() => {
     if (cell.isError) {
       shake.value = withSequence(
-        withTiming(-5, { duration: 50 }),
-        withTiming(5, { duration: 50 }),
-        withTiming(-5, { duration: 50 }),
-        withTiming(5, { duration: 50 }),
+        withTiming(-4, { duration: 50 }),
+        withTiming(4, { duration: 50 }),
+        withTiming(-4, { duration: 50 }),
+        withTiming(4, { duration: 50 }),
         withTiming(0, { duration: 50 })
       );
     }
@@ -112,23 +95,21 @@ function SudokuCell({
 
   const handlePress = () => {
     scale.value = withSequence(
-      withTiming(0.9, { duration: 60 }),
-      withSpring(1, { damping: 12, stiffness: 300 })
+      withTiming(0.92, { duration: 50 }),
+      withSpring(1, { damping: 14, stiffness: 300 })
     );
     onPress();
   };
 
-  const borderRight = (c === 2 || c === 5) ? 2.5 : 0.5;
-  const borderBottom = (r === 2 || r === 5) ? 2.5 : 0.5;
-  const borderRightColor = (c === 2 || c === 5) ? `${ACCENT2}90` : 'rgba(255,255,255,0.15)';
-  const borderBottomColor = (r === 2 || r === 5) ? `${ACCENT2}90` : 'rgba(255,255,255,0.15)';
+  const borderRight = (c === 2 || c === 5) ? 2 : 0.5;
+  const borderBottom = (r === 2 || r === 5) ? 2 : 0.5;
+  const borderRightColor = (c === 2 || c === 5) ? BORDER_PURPLE : 'rgba(255,255,255,0.06)';
+  const borderBottomColor = (r === 2 || r === 5) ? BORDER_PURPLE : 'rgba(255,255,255,0.06)';
 
   let bgColor = 'transparent';
-  if (isSelected) bgColor = `${ACCENT}45`;
-  else if (isHighlight) bgColor = `${ACCENT}18`;
-  else if (isRelated) bgColor = 'rgba(144,19,254,0.08)';
-
-  const noteSize = cellSize / 3 - 1;
+  if (isSelected) bgColor = `${ACCENT_BLUE}40`;
+  else if (isHighlight) bgColor = `${ACCENT_BLUE}15`;
+  else if (isRelated) bgColor = `${ACCENT_PURPLE}15`;
 
   return (
     <Animated.View style={[animatedStyle, {
@@ -147,10 +128,10 @@ function SudokuCell({
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
             <Text style={[
               styles.cellText,
-              { fontSize: cellSize * 0.48 },
+              { fontSize: cellSize * 0.45 },
               cell.isGiven ? styles.cellGiven : styles.cellUser,
               cell.isError && styles.cellError,
-              isSelected && !cell.isGiven && !cell.isError && { color: '#FFFFFF', textShadowColor: ACCENT, textShadowRadius: 8 },
+              isSelected && !cell.isGiven && !cell.isError && { color: '#FFFFFF', textShadowColor: ACCENT_BLUE, textShadowRadius: 6 },
             ]}>
               {cell.val}
             </Text>
@@ -161,34 +142,33 @@ function SudokuCell({
   );
 }
 
-// ── Main Sudoku Component ──────────────────────────────────────────────────
 export default function Sudoku() {
-  const [difficulty, setDifficulty] = useState<Difficulty>('EASY');
-  const [board, setBoard] = useState<BoardState>([]);
-  const [solution, setSolution] = useState<number[][]>([]);
-  const [selectedCell, setSelectedCell] = useState<{ r: number; c: number } | null>(null);
-  const [history, setHistory] = useState<BoardState[]>([]);
-  const [future, setFuture] = useState<BoardState[]>([]);
+  const [difficulty, setDifficulty] = useState('EASY');
+  const [board, setBoard] = useState([]);
+  const [solution, setSolution] = useState([]);
+  const [selectedCell, setSelectedCell] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [future, setFuture] = useState([]);
   const [timer, setTimer] = useState(0);
   const [hints, setHints] = useState(3);
   const [isWon, setIsWon] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [mistakes, setMistakes] = useState(0);
   const [gameStarted, setGameStarted] = useState(false);
 
-  const timerRef = useRef<any>(null);
-  const inputRef = useRef<TextInput>(null);
+  const timerRef = useRef(null);
+  const inputRef = useRef(null);
 
   useEffect(() => {
-    if (gameStarted && !isWon) {
+    if (gameStarted && !isWon && !isPaused) {
       timerRef.current = setInterval(() => setTimer(t => t + 1), 1000);
     }
     return () => clearInterval(timerRef.current);
-  }, [gameStarted, isWon]);
+  }, [gameStarted, isWon, isPaused]);
 
-  // Auto-start first game
   useEffect(() => { initGame('EASY'); }, []);
 
-  const initGame = (diff: Difficulty) => {
+  const initGame = (diff) => {
     let sol = SEED_BOARD.map(row => [...row]);
     const numMap = [1, 2, 3, 4, 5, 6, 7, 8, 9].sort(() => Math.random() - 0.5);
     sol = sol.map(row => row.map(val => numMap[val - 1]));
@@ -196,7 +176,7 @@ export default function Sudoku() {
 
     const toRemove = diff === 'EASY' ? 30 : diff === 'MEDIUM' ? 45 : 60;
     let b = sol.map(row =>
-      row.map(val => ({ val, isGiven: true, notes: new Set<number>(), isError: false }))
+      row.map(val => ({ val, isGiven: true, notes: new Set(), isError: false }))
     );
 
     let removed = 0;
@@ -218,20 +198,21 @@ export default function Sudoku() {
     setTimer(0);
     setHints(3);
     setIsWon(false);
+    setIsPaused(false);
     setMistakes(0);
     setGameStarted(true);
   };
 
-  const saveHistory = (newBoard: BoardState) => {
+  const saveHistory = (newBoard) => {
     setHistory(prev => [...prev.slice(-20), newBoard]);
     setFuture([]);
   };
 
-  const deepCopyBoard = (b: BoardState): BoardState =>
+  const deepCopyBoard = (b) =>
     b.map(row => row.map(cell => ({ ...cell, notes: new Set(cell.notes) })));
 
-  const handleInput = useCallback((num: number) => {
-    if (!selectedCell || isWon) return;
+  const handleInput = useCallback((num) => {
+    if (!selectedCell || isWon || isPaused) return;
     const { r, c } = selectedCell;
     if (board[r][c].isGiven) return;
 
@@ -256,10 +237,10 @@ export default function Sudoku() {
     setBoard(newBoard);
     saveHistory(newBoard);
     checkWin(newBoard);
-  }, [selectedCell, isWon, board, solution]);
+  }, [selectedCell, isWon, isPaused, board, solution]);
 
   const useHint = () => {
-    if (!selectedCell || hints <= 0 || isWon) return;
+    if (!selectedCell || hints <= 0 || isWon || isPaused) return;
     const { r, c } = selectedCell;
     if (board[r][c].isGiven || board[r][c].val === solution[r][c]) return;
 
@@ -275,7 +256,7 @@ export default function Sudoku() {
   };
 
   const undo = () => {
-    if (history.length <= 1) return;
+    if (history.length <= 1 || isPaused) return;
     tapMedium();
     const current = history[history.length - 1];
     const prev = history[history.length - 2];
@@ -285,7 +266,7 @@ export default function Sudoku() {
   };
 
   const redo = () => {
-    if (future.length === 0) return;
+    if (future.length === 0 || isPaused) return;
     tapMedium();
     const next = future[0];
     setHistory(h => [...h, next]);
@@ -293,7 +274,7 @@ export default function Sudoku() {
     setBoard(next);
   };
 
-  const checkWin = (b: BoardState) => {
+  const checkWin = (b) => {
     for (let r = 0; r < 9; r++)
       for (let c = 0; c < 9; c++)
         if (b[r][c].val !== solution[r][c]) return;
@@ -301,7 +282,8 @@ export default function Sudoku() {
     notifySuccess();
   };
 
-  const handleCellTap = (r: number, c: number) => {
+  const handleCellTap = (r, c) => {
+    if (isPaused) return;
     tapLight();
     setSelectedCell({ r, c });
     if (Platform.OS !== 'web') {
@@ -309,25 +291,15 @@ export default function Sudoku() {
     }
   };
 
-  // ── Keyboard Controls ────────────────────────────────────────────────────
-  useKeyboard((key: KeyboardKey) => {
-    const k = key as string;
+  useKeyboard((key) => {
+    if (isPaused) return;
+    const k = key;
     if (['1','2','3','4','5','6','7','8','9'].includes(k)) {
       handleInput(parseInt(k));
     } else if (k === 'Backspace' || k === 'Delete' || k === '0') {
       handleInput(0);
     } else if (k === 'h' || k === 'H') {
       useHint();
-    } else if (selectedCell) {
-      const { r, c } = selectedCell;
-      if (k === 'ArrowUp' || k === 'w')
-        setSelectedCell({ r: Math.max(0, r - 1), c });
-      else if (k === 'ArrowDown' || k === 's')
-        setSelectedCell({ r: Math.min(8, r + 1), c });
-      else if (k === 'ArrowLeft' || k === 'a')
-        setSelectedCell({ r, c: Math.max(0, c - 1) });
-      else if (k === 'ArrowRight' || k === 'd')
-        setSelectedCell({ r, c: Math.min(8, c + 1) });
     } else if (k === 'Tab') {
       if (selectedCell) {
         const { r, c } = selectedCell;
@@ -340,27 +312,37 @@ export default function Sudoku() {
       } else {
         setSelectedCell({ r: 0, c: 0 });
       }
+    } else if (selectedCell) {
+      const { r, c } = selectedCell;
+      if (k === 'ArrowUp' || k === 'w')
+        setSelectedCell({ r: Math.max(0, r - 1), c });
+      else if (k === 'ArrowDown' || k === 's')
+        setSelectedCell({ r: Math.min(8, r + 1), c });
+      else if (k === 'ArrowLeft' || k === 'a')
+        setSelectedCell({ r, c: Math.max(0, c - 1) });
+      else if (k === 'ArrowRight' || k === 'd')
+        setSelectedCell({ r, c: Math.min(8, c + 1) });
     }
-  }, [selectedCell, handleInput, useHint]);
+  }, [selectedCell, handleInput, useHint, isPaused]);
 
   const isDesktop = screenWidth >= 768;
 
-  const formatTime = (secs: number) => {
+  const formatTime = (secs) => {
     const m = Math.floor(secs / 60);
     const s = secs % 60;
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  const boardWidth = isDesktop ? Math.min(screenWidth - 350, 500) : Math.min(screenWidth - 24, 420);
+  const boardWidth = isDesktop ? Math.min(screenWidth - 120, 380) : Math.min(screenWidth - 40, 340);
   const cellSize = boardWidth / 9;
 
   return (
     <View style={styles.root}>
-      <AnimatedBackground />
+      <CyberBackground autoScroll />
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         <GameHeader
           title="SUDOKU"
-          accentColor={ACCENT2}
+          accentColor={ACCENT_PURPLE}
           onBack={() => router.replace('/')}
         />
 
@@ -370,37 +352,33 @@ export default function Sudoku() {
           showsVerticalScrollIndicator={false}
           bounces={false}
         >
-          {/* ── Difficulty Selector (inline, same page) ── */}
-          <View style={[styles.settingsPanel, glassmorphism()]}>
+          <View style={[styles.settingsPanel, glassmorphism(PANEL_BG)]}>
             <Text style={styles.settingLabel}>DIFFICULTY</Text>
             <SegmentedControl
-              options={['EASY', 'MEDIUM', 'HARD'] as Difficulty[]}
-              labels={['⚡ EASY', '🔥 MEDIUM', '💀 HARD']}
+              options={['EASY', 'MEDIUM', 'HARD']}
+              labels={['EASY', 'MEDIUM', 'HARD']}
               value={difficulty}
               onChange={(d) => initGame(d)}
               activeColor={DIFF_COLORS[difficulty]}
             />
           </View>
 
-          {/* ── Status Pills ── */}
           <View style={styles.statusBar}>
-            <View style={[styles.statusPill, glassmorphism()]}>
+            <View style={[styles.statusPill, glassmorphism(PANEL_BG)]}>
               <Text style={styles.statusIcon}>⏱</Text>
               <Text style={styles.statusValue}>{formatTime(timer)}</Text>
             </View>
-            <View style={[styles.statusPill, glassmorphism(), { borderColor: `${DANGER}40` }]}>
+            <View style={[styles.statusPill, glassmorphism(PANEL_BG), { borderColor: mistakes > 0 ? `${DANGER}50` : 'transparent' }]}>
               <Text style={styles.statusIcon}>✗</Text>
               <Text style={[styles.statusValue, { color: mistakes > 0 ? DANGER : Colors.text.secondary }]}>{mistakes}</Text>
             </View>
-            <View style={[styles.statusPill, glassmorphism(), { borderColor: `${WARNING}40` }]}>
+            <View style={[styles.statusPill, glassmorphism(PANEL_BG), { borderColor: hints > 0 ? `${WARNING}40` : 'transparent' }]}>
               <Text style={styles.statusIcon}>💡</Text>
               <Text style={[styles.statusValue, { color: hints > 0 ? WARNING : Colors.text.muted }]}>{hints}</Text>
             </View>
           </View>
 
-          {/* ── Main Game Area (Responsive) ── */}
-          <View style={isDesktop ? styles.desktopLayout : styles.mobileLayout}>
-            {/* ── Board ── */}
+          <View style={styles.gameLayout}>
             <View style={[styles.boardWrapper, { width: boardWidth + 4, height: boardWidth + 4 }]}>
               <View style={[styles.board, { width: boardWidth, height: boardWidth }]}>
                 {board.map((row, r) => (
@@ -431,38 +409,33 @@ export default function Sudoku() {
               </View>
             </View>
 
-            <View style={isDesktop ? styles.desktopControls : styles.mobileControls}>
-              {/* ── Tool Bar ── */}
+            <View style={styles.controlsContainer}>
               <View style={styles.toolbar}>
-                <TouchableOpacity style={[styles.toolBtn, glassmorphism(), history.length <= 1 && styles.toolBtnDisabled]} onPress={undo}>
+                <TouchableOpacity style={[styles.toolBtn, glassmorphism(PANEL_BG), history.length <= 1 && styles.toolBtnDisabled]} onPress={undo}>
                   <Text style={styles.toolBtnIcon}>↩</Text>
                   <Text style={styles.toolBtnLabel}>UNDO</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.toolBtn, glassmorphism(), future.length === 0 && styles.toolBtnDisabled]} onPress={redo}>
+                <TouchableOpacity style={[styles.toolBtn, glassmorphism(PANEL_BG), future.length === 0 && styles.toolBtnDisabled]} onPress={redo}>
                   <Text style={styles.toolBtnIcon}>↪</Text>
                   <Text style={styles.toolBtnLabel}>REDO</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.toolBtn, glassmorphism()]} onPress={() => handleInput(0)}>
+                <TouchableOpacity style={[styles.toolBtn, glassmorphism(PANEL_BG)]} onPress={() => handleInput(0)}>
                   <Text style={styles.toolBtnIcon}>⌫</Text>
                   <Text style={styles.toolBtnLabel}>ERASE</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.toolBtn, glassmorphism(), hints === 0 && styles.toolBtnDisabled]}
+                  style={[styles.toolBtn, glassmorphism(PANEL_BG), hints === 0 && styles.toolBtnDisabled]}
                   onPress={useHint}
                 >
                   <Text style={styles.toolBtnIcon}>💡</Text>
                   <Text style={[styles.toolBtnLabel, { color: hints > 0 ? WARNING : Colors.text.muted }]}>HINT</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.toolBtn, glassmorphism()]}
-                  onPress={() => initGame(difficulty)}
-                >
-                  <Text style={[styles.toolBtnIcon, { color: SUCCESS }]}>↺</Text>
-                  <Text style={[styles.toolBtnLabel, { color: SUCCESS }]}>NEW</Text>
+                <TouchableOpacity style={[styles.toolBtn, glassmorphism(PANEL_BG)]} onPress={() => setIsPaused(true)}>
+                  <Text style={styles.toolBtnIcon}>⏸</Text>
+                  <Text style={styles.toolBtnLabel}>PAUSE</Text>
                 </TouchableOpacity>
               </View>
 
-              {/* ── Native Keyboard Input (Hidden) ── */}
               <TextInput
                 ref={inputRef}
                 style={{ width: 0, height: 0, opacity: 0 }}
@@ -485,19 +458,27 @@ export default function Sudoku() {
           </View>
 
           <Text style={styles.kbHint}>
-            Arrow keys / WASD to navigate · 1–9 to enter · Delete to erase · H for hint · Tab to move
+            Arrow keys / WASD to navigate · 1–9 to enter · Delete to erase · H for hint
           </Text>
-
         </ScrollView>
 
-        {/* ── Win Modal ── */}
+        {isPaused && (
+          <View style={styles.pauseOverlay}>
+            <Text style={styles.pausedTitle}>PAUSED</Text>
+            <Text style={styles.pausedSub}>Take a breath, your timer is frozen.</Text>
+            <TouchableOpacity style={styles.resumeBtn} onPress={() => setIsPaused(false)}>
+              <Text style={styles.resumeBtnText}>RESUME</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         <GameOverModal
           visible={isWon}
           title="PUZZLE SOLVED! 🎉"
           score={formatTime(timer)}
           highScore={''}
           isNewHighScore={false}
-          accentColor={SUCCESS}
+          accentColor={ACCENT_BLUE}
           onRestart={() => initGame(difficulty)}
           onHome={() => router.replace('/')}
         />
@@ -506,22 +487,19 @@ export default function Sudoku() {
   );
 }
 
-// ── Styles ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.bg.primary },
+  root: { flex: 1, backgroundColor: DARK_BLUE_BG },
   safe: { flex: 1 },
   scrollContent: {
     alignItems: 'center',
     paddingHorizontal: Spacing[2],
     paddingTop: Spacing[2],
     paddingBottom: Spacing[10],
-    gap: Spacing[3],
+    gap: Spacing[4],
   },
-
-  // ── Settings Panel ──
   settingsPanel: {
     width: '100%',
-    maxWidth: 440,
+    maxWidth: 420,
     padding: Spacing[4],
     borderRadius: Radius.lg,
   },
@@ -532,8 +510,6 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     marginBottom: Spacing[2],
   },
-
-  // ── Segmented Control ──
   segmented: {
     flexDirection: 'row',
     gap: Spacing[2],
@@ -543,7 +519,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing[2],
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(255,255,255,0.08)',
     borderRadius: Radius.full,
   },
   segText: {
@@ -552,44 +528,50 @@ const styles = StyleSheet.create({
     color: Colors.text.muted,
     letterSpacing: 0.5,
   },
-
-  // ── Status Bar ──
   statusBar: {
     flexDirection: 'row',
-    gap: Spacing[2],
+    gap: Spacing[3],
     justifyContent: 'center',
+    width: '100%',
+    maxWidth: 420,
   },
   statusPill: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 20,
+    justifyContent: 'center',
+    borderRadius: Radius.full,
     paddingHorizontal: Spacing[3],
-    paddingVertical: Spacing[1],
-    gap: Spacing[1],
+    paddingVertical: Spacing[2],
+    gap: Spacing[2],
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
-  statusIcon: { fontSize: 12 },
+  statusIcon: { fontSize: 13 },
   statusValue: {
     fontFamily: Fonts.bodySemiBold,
     fontSize: FontSize.sm,
     color: Colors.text.secondary,
   },
-
-  // ── Board ──
+  gameLayout: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: Spacing[6],
+    width: '100%',
+  },
   boardWrapper: {
     borderRadius: Radius.sm,
     overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: `${ACCENT2}60`,
-    ...elegantShadow(0.4, 20, 10, ACCENT2),
+    borderWidth: 1.5,
+    borderColor: `${ACCENT_PURPLE}90`,
+    ...elegantShadow(0.4, 15, 8, ACCENT_PURPLE),
   },
   board: {
-    backgroundColor: 'rgba(11, 7, 21, 0.85)',
+    backgroundColor: BOARD_BG,
     borderLeftWidth: 0.5,
     borderTopWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.15)',
+    borderColor: 'rgba(255,255,255,0.06)',
   },
-
-  // ── Cell ──
   cellText: {
     fontFamily: Fonts.heading,
   },
@@ -597,68 +579,100 @@ const styles = StyleSheet.create({
     color: Colors.text.primary,
   },
   cellUser: {
-    color: ACCENT,
-    textShadowColor: ACCENT,
+    color: ACCENT_BLUE,
+    textShadowColor: ACCENT_BLUE,
     textShadowRadius: 4,
   },
   cellError: {
     color: DANGER,
     textShadowColor: DANGER,
-    textShadowRadius: 8,
+    textShadowRadius: 5,
   },
-
-  // ── Toolbar ──
+  controlsContainer: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 420,
+  },
   toolbar: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: Spacing[2],
     justifyContent: 'center',
+    width: '100%',
   },
   toolBtn: {
     borderRadius: Radius.sm,
-    paddingVertical: Spacing[2],
-    paddingHorizontal: Spacing[3],
+    paddingVertical: Spacing[3],
+    paddingHorizontal: Spacing[2],
     alignItems: 'center',
-    minWidth: 56,
-  },
-  toolBtnActive: {
-    borderColor: ACCENT,
-    backgroundColor: `${ACCENT}15`,
+    justifyContent: 'center',
+    flex: 1,
+    minWidth: 55,
   },
   toolBtnDisabled: {
-    opacity: 0.4,
+    opacity: 0.35,
   },
   toolBtnIcon: {
-    fontSize: 18,
+    fontSize: 16,
     color: Colors.text.primary,
+    marginBottom: 4,
   },
   toolBtnLabel: {
     fontFamily: Fonts.bodySemiBold,
     fontSize: 9,
     color: Colors.text.muted,
-    marginTop: 2,
     letterSpacing: 0.5,
   },
-
-  // ── Layout ──
-  desktopLayout: {
-    flexDirection: 'row',
+  kbHint: {
+    fontFamily: Fonts.body,
+    fontSize: FontSize.xs,
+    color: Colors.text.muted,
+    textAlign: 'center',
+    marginTop: Spacing[1],
+  },
+  pauseOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(8, 15, 30, 0.95)',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing[8],
+    zIndex: 100,
   },
-  mobileLayout: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: Spacing[3],
+  pausedTitle: { 
+    fontFamily: Fonts.heading, 
+    fontSize: FontSize['2xl'], 
+    color: '#A855F7',
+    textShadowColor: '#6B21A8',
+    textShadowRadius: 10,
+    letterSpacing: 4 
   },
-  desktopControls: {
-    flexDirection: 'column',
-    gap: Spacing[6],
-    alignItems: 'center',
+  pausedSub: { 
+    fontFamily: Fonts.body, 
+    fontSize: FontSize.sm, 
+    color: '#E0E7FF',
+    opacity: 0.8, 
+    marginTop: Spacing[2] 
   },
-  mobileControls: {
-    flexDirection: 'column',
-    gap: Spacing[3],
+  resumeBtn: {
+    marginTop: Spacing[6], 
+    paddingVertical: Spacing[3], 
+    paddingHorizontal: Spacing[6],
+    borderRadius: Radius.md,
+    backgroundColor: '#1E1B4B',
+    borderWidth: 1.5,
+    borderColor: '#6B21A8',
+    shadowColor: '#A855F7',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 5,
     alignItems: 'center',
+    justifyContent: 'center'
+  },
+  resumeBtnText: {
+    fontFamily: Fonts.heading,
+    fontSize: FontSize.md,
+    color: '#38BDF8',
+    letterSpacing: 2,
   }
 });

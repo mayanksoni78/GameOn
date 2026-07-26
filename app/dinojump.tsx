@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, TouchableWithoutFeedback, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableWithoutFeedback, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -11,13 +11,13 @@ import Animated, {
   SharedValue,
 } from 'react-native-reanimated';
 import { Colors, elegantShadow } from '../src/theme/colors';
+import { Fonts, FontSize } from '../src/theme/typography';
 import { Spacing } from '../src/theme/spacing';
+import { CyberBackground } from '../src/components/CyberBackground';
 import { GameHeader } from '../src/components/GameHeader';
 import { GameOverModal } from '../src/components/GameOverModal';
-import { ControlsOverlay } from '../src/components/ControlsOverlay';
 import { screenHeight, screenWidth } from '../src/utils/dimensions';
 import { tapLight, notifyError } from '../src/utils/haptics';
-import { useKeyboard, KeyboardKey } from '../src/hooks/useKeyboard';
 import { BlurView } from 'expo-blur';
 
 const ACCENT = '#00E5FF'; // Cyberpunk Cyan
@@ -565,51 +565,90 @@ export default function DinoJump() {
     setObstacles([]);
     setScore(0);
     setGameOver(false);
-    setGameStarted(false);
+    setGameStarted(true);
     setIsPaused(false);
     setIsDucking(false);
     bgProgress.value = 0;
     gameDistance.value = 0;
   };
 
-  useKeyboard((key: KeyboardKey) => {
-    if (key === ' ' || key === 'ArrowUp' || key === 'w') {
-        jump();
-    }
-    if (key === 'Enter') {
-        if (gameOverRef.current) {
-            restart();
-            return;
-        }
-        if (!gameStartedRef.current) {
-            jump();
-        } else {
-            setIsPaused(p => !p);
-        }
-    }
-    if (key === 'ArrowDown' || key === 's') {
-        duck(true);
-    }
-  });
-  
-  // Need to detect keyup for smooth ducking release, but useKeyboard hook only gives keydown.
-  // Add a native web event listener specifically for keyup if possible, or rely on timeout.
+  // Single, authoritative keyboard handler.
+  // Uses capture phase (true) so it fires BEFORE React Native Modal / any element can intercept.
+  // Reads all game state from refs so there are zero stale-closure issues.
   useEffect(() => {
-      const handleKeyUp = (e: KeyboardEvent) => {
-          if (e.key === 'ArrowDown' || e.key === 's') {
-              duck(false);
-          }
-      };
-      if (typeof window !== 'undefined') {
-          window.addEventListener('keyup', handleKeyUp);
-          return () => window.removeEventListener('keyup', handleKeyUp);
+    if (typeof window === 'undefined') return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+
+      const key = e.key;
+      const isGameKey = [' ', 'ArrowUp', 'ArrowDown', 'w', 'W', 's', 'S', 'Enter'].includes(key);
+      if (!isGameKey) return;
+
+      // Prevent default (scrolling, button clicks from Enter, etc.)
+      e.preventDefault();
+      // Stop the event reaching modal buttons or other listeners
+      e.stopPropagation();
+
+      if (key === 'Enter') {
+        if (gameOverRef.current) {
+          // GAME OVER → RESTART & PLAY
+          restart();
+        } else if (!gameStartedRef.current) {
+          // NOT STARTED → START
+          setGameStarted(true);
+          setScore(0);
+          gameDistance.value = 0;
+          tapLight();
+        } else {
+          // RUNNING → PAUSE / PAUSED → RESUME
+          setIsPaused(p => !p);
+        }
+        return;
       }
-  }, []);
+
+      if (key === ' ' || key === 'ArrowUp' || key === 'w' || key === 'W') {
+        if (gameOverRef.current) return;
+        if (isPausedRef.current) { setIsPaused(false); return; }
+        if (!gameStartedRef.current) {
+          setGameStarted(true);
+          setScore(0);
+          gameDistance.value = 0;
+        }
+        if (dinoYRef.current === 0) {
+          tapLight();
+          setVelocity(JUMP_VELOCITY);
+        }
+        return;
+      }
+
+      if (key === 'ArrowDown' || key === 's' || key === 'S') {
+        if (gameOverRef.current || !gameStartedRef.current || isPausedRef.current) return;
+        setIsDucking(true);
+        if (dinoYRef.current < 0) setVelocity(v => v + 8);
+      }
+    };
+
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+        setIsDucking(false);
+      }
+    };
+
+    // capture: true fires BEFORE any element's bubble-phase handler
+    window.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('keyup', onKeyUp, true);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('keyup', onKeyUp, true);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps intentional — state is read via refs
 
   return (
     <TouchableWithoutFeedback onPress={jump}>
         <View style={styles.root}>
-        <DinoBackground bgProgress={bgProgress} gameDistance={gameDistance} />
+        <CyberBackground scrollOffset={gameDistance} />
         
         <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
             
@@ -622,25 +661,24 @@ export default function DinoJump() {
             />
 
             {!gameStarted && !gameOver && (
-                <ControlsOverlay
-                instructions={[
-                    "Jump over the neon obstacles.",
-                    "The simulation gets faster!"
-                ]}
-                controls={[
-                    { action: "Jump / Start", input: "Tap / Space / Up" },
-                    { action: "Duck / Fast Fall", input: "Down Arrow" },
-                    { action: "Pause / Resume", input: "Enter" }
-                ]}
-                />
+                <View style={[StyleSheet.absoluteFill, styles.startOverlay]}>
+                    <Text style={styles.startTitle}>🦖 DINO RUN</Text>
+                    <Text style={styles.startPrompt}>PRESS ENTER TO START</Text>
+                    <Text style={styles.startSub}>or tap the screen</Text>
+                    <View style={styles.startHints}>
+                        <Text style={styles.hintText}>⬆ Space / Up Arrow — Jump</Text>
+                        <Text style={styles.hintText}>⬇ Down Arrow — Duck</Text>
+                        <Text style={styles.hintText}>⏸ Enter — Pause / Resume</Text>
+                    </View>
+                </View>
             )}
             
             {isPaused && (
                 <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', zIndex: 100 }]}>
                     <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
                     <View style={styles.pausedOverlay}>
-                        <Text style={styles.pausedText}>PAUSED</Text>
-                        <Text style={styles.pausedSubtext}>Press Enter to resume</Text>
+                        <Text style={styles.pausedTitle}>PAUSED</Text>
+                        <Text style={styles.pausedSub}>Press P or Enter to resume</Text>
                     </View>
                 </View>
             )}
@@ -660,6 +698,13 @@ export default function DinoJump() {
 
                 {/* Ground */}
                 <CyberRoad gameDistance={gameDistance} />
+
+                {isPaused && (
+                    <View style={[styles.pausedOverlay, { backgroundColor: 'rgba(11,7,21,0.8)' }]}>
+                        <Text style={styles.pausedTitle}>PAUSED</Text>
+                        <Text style={styles.pausedSub}>Press ENTER or SPACE to resume</Text>
+                    </View>
+                )}
             </View>
 
             <GameOverModal
@@ -697,6 +742,24 @@ const styles = StyleSheet.create({
   obsWrapper: {
       position: 'absolute',
       zIndex: 5,
+  },
+  pausedOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      justifyContent: 'center',
+      alignItems: 'center',
+      zIndex: 20,
+  },
+  pausedTitle: {
+      fontFamily: Fonts.heading,
+      fontSize: FontSize['3xl'],
+      color: ACCENT,
+      letterSpacing: 4,
+      marginBottom: Spacing[2],
+  },
+  pausedSub: {
+      fontFamily: Fonts.body,
+      fontSize: FontSize.sm,
+      color: Colors.text.muted,
   },
   
   // Cyber Background Elements
@@ -795,28 +858,51 @@ const styles = StyleSheet.create({
       ...elegantShadow(1, 8, 0, '#EF4444'),
   },
   
-  // Paused UI
-  pausedOverlay: {
-      backgroundColor: 'rgba(20, 10, 40, 0.85)',
-      padding: Spacing[6],
-      borderRadius: 16,
-      borderWidth: 1,
-      borderColor: 'rgba(0, 229, 255, 0.4)',
+  // End of duplicate styles
+
+  // Start Screen
+  startOverlay: {
       alignItems: 'center',
-      ...elegantShadow(1, 15, 0, '#00E5FF'),
+      justifyContent: 'center',
+      zIndex: 100,
+      backgroundColor: 'rgba(9, 4, 16, 0.75)',
   },
-  pausedText: {
-      fontSize: 32,
-      fontWeight: 'bold',
+  startTitle: {
+      fontSize: 36,
+      fontWeight: '900',
       color: '#00E5FF',
-      letterSpacing: 4,
+      letterSpacing: 6,
       textShadowColor: '#00E5FF',
-      textShadowRadius: 10,
-      marginBottom: Spacing[2],
+      textShadowRadius: 20,
+      marginBottom: 16,
   },
-  pausedSubtext: {
-      fontSize: 16,
+  startPrompt: {
+      fontSize: 22,
+      fontWeight: 'bold',
       color: '#FFFFFF',
-      opacity: 0.8,
-  }
+      letterSpacing: 3,
+      textShadowColor: '#B300FF',
+      textShadowRadius: 12,
+      borderWidth: 2,
+      borderColor: 'rgba(0, 229, 255, 0.5)',
+      paddingHorizontal: 24,
+      paddingVertical: 10,
+      borderRadius: 8,
+      backgroundColor: 'rgba(0, 229, 255, 0.08)',
+      marginBottom: 10,
+  },
+  startSub: {
+      fontSize: 13,
+      color: 'rgba(255,255,255,0.5)',
+      marginBottom: 32,
+  },
+  startHints: {
+      gap: 8,
+      alignItems: 'center',
+  },
+  hintText: {
+      fontSize: 13,
+      color: 'rgba(255,255,255,0.55)',
+      letterSpacing: 1,
+  },
 });

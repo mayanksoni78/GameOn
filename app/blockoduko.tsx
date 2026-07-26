@@ -9,7 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors } from '../src/theme/colors';
 import { Fonts, FontSize } from '../src/theme/typography';
 import { Spacing, Radius } from '../src/theme/spacing';
-import { AnimatedBackground } from '../src/components/AnimatedBackground';
+import { CyberBackground } from '../src/components/CyberBackground';
 import { GameHeader } from '../src/components/GameHeader';
 import { GameOverModal } from '../src/components/GameOverModal';
 import { screenWidth, screenHeight } from '../src/utils/dimensions';
@@ -375,7 +375,7 @@ export default function Blockoduko() {
 
   return (
     <View style={styles.root}>
-      <AnimatedBackground />
+      <CyberBackground autoScroll />
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
 
         <GameHeader

@@ -7,7 +7,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Colors, glassmorphism, elegantShadow } from '../src/theme/colors';
 import { Fonts, FontSize } from '../src/theme/typography';
 import { Radius, Spacing } from '../src/theme/spacing';
-import { AnimatedBackground } from '../src/components/AnimatedBackground';
+import { CyberBackground } from '../src/components/CyberBackground';
 import { GameHeader } from '../src/components/GameHeader';
 import { GameOverModal } from '../src/components/GameOverModal';
 import { ControlsOverlay } from '../src/components/ControlsOverlay';
@@ -374,7 +374,7 @@ export default function Tetris() {
 
   return (
     <View style={styles.root}>
-      <AnimatedBackground />
+      <CyberBackground autoScroll />
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         
         <GameHeader

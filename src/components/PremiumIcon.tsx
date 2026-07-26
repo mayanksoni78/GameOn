@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, StyleSheet, Image } from 'react-native';
+import { View, StyleSheet, Image, ImageSourcePropType } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -8,8 +8,6 @@ import Animated, {
   withSequence,
   Easing,
 } from 'react-native-reanimated';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Colors } from '../theme/colors';
 
 export type IconId = 'snake' | 'tetris' | '2048' | 'tictactoe' | 'flappybird' | 'connect4' | 'bingo' | 'sudoku' | 'dinojump' | 'blockoduko';
 
@@ -19,21 +17,21 @@ interface PremiumIconProps {
   size?: number;
 }
 
-const ICON_MAP: Record<IconId, any> = {
-  snake: 'snake',
-  tetris: 'apps', // Classic block look
-  '2048': 'grid',
-  tictactoe: 'close-box-outline',
-  flappybird: 'bird',
-  connect4: 'dots-grid',
-  bingo: 'ticket', // Alternatively bullseye
-  sudoku: 'grid-large',
-  dinojump: 'dinosaur-pixel', // Perfect fit
-  blockoduko: 'puzzle-outline',
+// Map each game to its custom-generated cartoon icon asset
+const ICON_IMAGES: Record<IconId, ImageSourcePropType> = {
+  snake:      require('../../assets/images/icon_snake.jpg'),
+  tetris:     require('../../assets/images/icon_tetris.jpg'),
+  '2048':     require('../../assets/images/icon_game2048.jpg'),
+  tictactoe:  require('../../assets/images/icon_tictactoe.jpg'),
+  flappybird: require('../../assets/images/icon_flappybird.jpg'),
+  connect4:   require('../../assets/images/icon_connect4.jpg'),
+  bingo:      require('../../assets/images/icon_pacman.jpg'),
+  sudoku:     require('../../assets/images/icon_sudoku.jpg'),
+  dinojump:   require('../../assets/images/icon_dinojump.jpg'),
+  blockoduko: require('../../assets/images/icon_blockoduko.jpg'),
 };
 
 export const PremiumIcon: React.FC<PremiumIconProps> = ({ id, color, size = 40 }) => {
-  const iconName = ICON_MAP[id];
   const translateY = useSharedValue(0);
 
   useEffect(() => {
@@ -55,6 +53,8 @@ export const PremiumIcon: React.FC<PremiumIconProps> = ({ id, color, size = 40 }
     transform: [{ translateY: translateY.value }],
   }));
 
+  const imageSource = ICON_IMAGES[id];
+
   return (
     <Animated.View style={[styles.container, floatingStyle, { width: size, height: size }]}>
       {/* Glow Effect behind the icon */}
@@ -64,19 +64,16 @@ export const PremiumIcon: React.FC<PremiumIconProps> = ({ id, color, size = 40 }
           { shadowColor: color, shadowRadius: size * 0.4 }
       ]} />
       
-      {/* The crisp vector icon itself or custom image */}
-      {id === 'dinojump' ? (
-          <Image 
-              source={require('../../assets/images/dino_logo.jpg')}
-              style={{ width: size * 0.8, height: size * 0.8, borderRadius: size * 0.15 }}
-          />
-      ) : (
-          <MaterialCommunityIcons 
-              name={iconName} 
-              size={size * 0.75} // Scale down slightly to fit inside container
-              color={color} 
-          />
-      )}
+      {/* The premium generated cartoon icon */}
+      <Image 
+          source={imageSource}
+          style={{ 
+            width: size * 0.85, 
+            height: size * 0.85, 
+            borderRadius: size * 0.2,
+          }}
+          resizeMode="cover"
+      />
     </Animated.View>
   );
 };

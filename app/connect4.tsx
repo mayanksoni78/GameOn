@@ -13,7 +13,7 @@ import Animated, {
 import { Colors, glassmorphism, elegantShadow } from '../src/theme/colors';
 import { Fonts, FontSize } from '../src/theme/typography';
 import { Spacing, Radius } from '../src/theme/spacing';
-import { AnimatedBackground } from '../src/components/AnimatedBackground';
+import { CyberBackground } from '../src/components/CyberBackground';
 import { GameHeader } from '../src/components/GameHeader';
 import { GameOverModal } from '../src/components/GameOverModal';
 import { screenWidth } from '../src/utils/dimensions';
@@ -360,7 +360,7 @@ export default function Connect4() {
 
   return (
     <View style={styles.root}>
-      <AnimatedBackground />
+      <CyberBackground autoScroll />
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
 
         <GameHeader

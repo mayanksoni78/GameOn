@@ -12,7 +12,7 @@ import { Href } from 'expo-router';
 import { Colors } from '../src/theme/colors';
 import { Fonts, FontSize } from '../src/theme/typography';
 import { Spacing } from '../src/theme/spacing';
-import { AnimatedBackground } from '../src/components/AnimatedBackground';
+import { CyberBackground } from '../src/components/CyberBackground';
 import { PremiumGameCard } from '../src/components/PremiumGameCard';
 import { IconId } from '../src/components/PremiumIcon';
 
@@ -29,7 +29,7 @@ const GAMES: {
   { id: 'tictactoe', title: 'Tic Tac', subtitle: 'Strategic X and O battles.', route: '/tictactoe', accent: Colors.accent.primary },
   { id: 'flappybird', title: 'Flappy', subtitle: 'Navigate through the obstacles.', route: '/flappybird', accent: Colors.accent.danger },
   { id: 'connect4', title: 'Connect 4', subtitle: 'Drop pieces to form a line of 4.', route: '/connect4', accent: '#FF3D71' },
-  { id: 'bingo', title: 'Bingo', subtitle: 'Race against time to clear lines.', route: '/bingo', accent: '#D500F9' },
+  { id: 'bingo', title: 'Mouse Cat', subtitle: 'Collect cheese, dodge cats!', route: '/pacman', accent: '#3DD6D0' },
   { id: 'sudoku', title: 'Sudoku', subtitle: 'Classic logic-based number puzzle.', route: '/sudoku', accent: '#2979FF' },
   { id: 'dinojump', title: 'Dino Jump', subtitle: 'Endless runner survival.', route: '/dinojump', accent: '#00E676' },
   { id: 'blockoduko', title: 'Block', subtitle: 'Wood block puzzle logic.', route: '/blockoduko', accent: '#7C3AED' },
@@ -38,7 +38,7 @@ const GAMES: {
 export default function Home() {
   return (
     <View style={styles.root}>
-      <AnimatedBackground />
+      <CyberBackground autoScroll />
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         <ScrollView
           contentContainerStyle={styles.scrollContent}

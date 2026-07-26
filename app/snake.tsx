@@ -8,7 +8,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, glassmorphism, elegantShadow } from '../src/theme/colors';
 import { Radius, Spacing } from '../src/theme/spacing';
 import { Fonts, FontSize } from '../src/theme/typography';
-import { AnimatedBackground } from '../src/components/AnimatedBackground';
+import { CyberBackground } from '../src/components/CyberBackground';
 import { GameHeader } from '../src/components/GameHeader';
 import { GameOverModal } from '../src/components/GameOverModal';
 import { tapLight, notifySuccess, notifyError, tapMedium } from '../src/utils/haptics';
@@ -19,8 +19,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 // ---- Theme constants ----
-const SNAKE_GREEN = '#00E5FF'; // Electric Cyan (keeping variable name for compatibility)
-const HEAD_GRADIENT = ['#00FFFF', '#0070FF'] as const;
+const SNAKE_GREEN = '#2ED573'; // Updated to a richer cartoon green for UI elements
 const PURPLE_GLOW = '#A855F7';
 const GRID_SIZE = 20;
 
@@ -34,7 +33,6 @@ const SPEED_MAP = {
   HARD: 90,
 };
 
-// Valid MaterialCommunityIcons for fruits with refreshed, distinct colors
 const FRUITS = [
   { name: 'food-apple', color: '#FF4757', points: 1, label: 'Apple' },       // shiny red Apple
   { name: 'fruit-citrus', color: '#FFA502', points: 2, label: 'Orange' },    // bright Orange
@@ -68,7 +66,7 @@ const BoardBackground = memo(({ boardWidth, cellSize }: { boardWidth: number; ce
                 height: cellSize,
                 backgroundColor: dark ? 'rgba(0,0,0,0.18)' : 'rgba(0,0,0,0.08)',
                 borderWidth: 0.5,
-                borderColor: 'rgba(255, 255, 255, 0.25)',
+                borderColor: 'rgba(255, 255, 255, 0.15)',
               }}
             />
           );
@@ -79,12 +77,13 @@ const BoardBackground = memo(({ boardWidth, cellSize }: { boardWidth: number; ce
 });
 BoardBackground.displayName = 'BoardBackground';
 
-// Snake head — Circular, cute face with crisp WHITE eyes and dark pupils/highlights
+// Snake head — Realistic Cartoon Style: Snout, Reptile Eyes, Slit Pupils, Forked Tongue
 const SnakeHead = ({ x, y, cellSize, speed, direction }: any) => {
   const animX = useSharedValue(x * cellSize);
   const animY = useSharedValue(y * cellSize);
   const rotation = useSharedValue(0);
   const blink = useSharedValue(1);
+  const tongue = useSharedValue(0);
 
   useEffect(() => {
     animX.value = withTiming(x * cellSize, { duration: speed, easing: Easing.linear });
@@ -101,13 +100,25 @@ const SnakeHead = ({ x, y, cellSize, speed, direction }: any) => {
   }, [direction]);
 
   useEffect(() => {
+    // Eye blink animation
     blink.value = withRepeat(
       withSequence(
-        withDelay(Math.random() * 3200 + 1000, withTiming(0.1, { duration: 60 })),
-        withTiming(1, { duration: 60 })
+        withDelay(Math.random() * 3000 + 2000, withTiming(0.1, { duration: 80 })),
+        withTiming(1, { duration: 80 })
       ),
       -1,
       true
+    );
+    // Tongue flickering animation
+    tongue.value = withRepeat(
+      withSequence(
+        withDelay(2500, withTiming(1, { duration: 150 })),
+        withTiming(0, { duration: 150 }),
+        withTiming(1, { duration: 100 }),
+        withTiming(0, { duration: 100 })
+      ),
+      -1,
+      false
     );
   }, []);
 
@@ -120,6 +131,10 @@ const SnakeHead = ({ x, y, cellSize, speed, direction }: any) => {
   }));
 
   const blinkStyle = useAnimatedStyle(() => ({ transform: [{ scaleY: blink.value }] }));
+  const tongueStyle = useAnimatedStyle(() => ({
+    transform: [{ scaleX: tongue.value }, { translateX: tongue.value * (cellSize * 0.15) }],
+    opacity: tongue.value,
+  }));
 
   return (
     <Animated.View
@@ -133,74 +148,109 @@ const SnakeHead = ({ x, y, cellSize, speed, direction }: any) => {
         animStyle,
       ]}
     >
+      {/* Animated Forked Tongue */}
+      <Animated.View style={[
+        tongueStyle, 
+        { 
+          position: 'absolute', 
+          right: '-15%', 
+          top: '45%', 
+          width: '35%', 
+          height: '10%', 
+          backgroundColor: '#FF3333', 
+          zIndex: -1,
+          flexDirection: 'row',
+          justifyContent: 'flex-end',
+          alignItems: 'center'
+        }
+      ]}>
+         {/* Tongue fork top */}
+         <View style={{ position: 'absolute', right: -4, top: -3, width: 6, height: 2, backgroundColor: '#FF3333', transform: [{rotate: '30deg'}]}} />
+         {/* Tongue fork bottom */}
+         <View style={{ position: 'absolute', right: -4, bottom: -3, width: 6, height: 2, backgroundColor: '#FF3333', transform: [{rotate: '-30deg'}]}} />
+      </Animated.View>
+
       <View
         style={{
           flex: 1,
-          margin: 1, // Constrained tightly to cell bounds without box overflow
-          borderRadius: 999, // Circular face
+          margin: 0,
+          borderTopLeftRadius: cellSize * 0.4,
+          borderBottomLeftRadius: cellSize * 0.4,
+          borderTopRightRadius: cellSize * 0.25, // Snout shape
+          borderBottomRightRadius: cellSize * 0.25,
           overflow: 'hidden',
-          alignItems: 'center',
-          justifyContent: 'center',
-          borderWidth: 1,
-          borderColor: 'rgba(255, 255, 255, 0.45)',
+          backgroundColor: '#1E5631',
+          borderWidth: 1.5,
+          borderColor: 'rgba(0,0,0,0.4)',
         }}
       >
         <LinearGradient
-          colors={HEAD_GRADIENT}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+          colors={['#4C9A2A', '#2E7D32', '#1B5E20']}
+          start={{ x: 0.2, y: 0 }}
+          end={{ x: 0.8, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
 
-        {/* Clean White Left Eye with dark pupil */}
+        {/* Nostrils */}
+        <View style={{ position: 'absolute', right: '8%', top: '25%', width: '12%', height: '12%', backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 999 }} />
+        <View style={{ position: 'absolute', right: '8%', bottom: '25%', width: '12%', height: '12%', backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 999 }} />
+
+        {/* Left Reptile Eye */}
         <Animated.View
           style={[
             blinkStyle,
             {
               position: 'absolute',
-              top: '15%',
-              right: '18%',
-              width: '32%',
-              height: '32%',
-              backgroundColor: '#FFFFFF',
+              top: '12%',
+              right: '25%',
+              width: '35%',
+              height: '30%',
+              backgroundColor: '#FFD700', // Glowing yellow eye
               borderRadius: 999,
               alignItems: 'center',
               justifyContent: 'center',
+              borderWidth: 1,
+              borderColor: 'rgba(0,0,0,0.6)',
+              shadowColor: '#FFD700',
+              shadowOpacity: 0.5,
+              shadowRadius: 2,
             },
           ]}
         >
-          {/* Dark Pupil */}
-          <View style={{ width: '55%', height: '55%', backgroundColor: '#1E293B', borderRadius: 999, alignItems: 'center', justifyContent: 'center' }}>
-            <View style={{ position: 'absolute', top: '15%', right: '15%', width: '35%', height: '35%', backgroundColor: '#FFFFFF', borderRadius: 999 }} />
-          </View>
+          {/* Vertical Slit Pupil */}
+          <View style={{ width: '25%', height: '75%', backgroundColor: '#000', borderRadius: 999 }} />
+          {/* Eye reflection */}
+          <View style={{ position: 'absolute', top: '15%', left: '20%', width: '30%', height: '30%', backgroundColor: 'rgba(255,255,255,0.7)', borderRadius: 999 }} />
         </Animated.View>
 
-        {/* Clean White Right Eye with dark pupil */}
+        {/* Right Reptile Eye */}
         <Animated.View
           style={[
             blinkStyle,
             {
               position: 'absolute',
-              bottom: '15%',
-              right: '18%',
-              width: '32%',
-              height: '32%',
-              backgroundColor: '#FFFFFF',
+              bottom: '12%',
+              right: '25%',
+              width: '35%',
+              height: '30%',
+              backgroundColor: '#FFD700', // Glowing yellow eye
               borderRadius: 999,
               alignItems: 'center',
               justifyContent: 'center',
+              borderWidth: 1,
+              borderColor: 'rgba(0,0,0,0.6)',
+              shadowColor: '#FFD700',
+              shadowOpacity: 0.5,
+              shadowRadius: 2,
             },
           ]}
         >
-          {/* Dark Pupil */}
-          <View style={{ width: '55%', height: '55%', backgroundColor: '#1E293B', borderRadius: 999, alignItems: 'center', justifyContent: 'center' }}>
-            <View style={{ position: 'absolute', top: '15%', right: '15%', width: '35%', height: '35%', backgroundColor: '#FFFFFF', borderRadius: 999 }} />
-          </View>
+          <View style={{ width: '25%', height: '75%', backgroundColor: '#000', borderRadius: 999 }} />
+          <View style={{ position: 'absolute', top: '15%', left: '20%', width: '30%', height: '30%', backgroundColor: 'rgba(255,255,255,0.7)', borderRadius: 999 }} />
         </Animated.View>
 
-        {/* Soft Blushing Cheeks */}
-        <Animated.View style={[blinkStyle, { position: 'absolute', top: '10%', right: '55%', width: '22%', height: '16%', backgroundColor: '#FFA2A2', borderRadius: 999, opacity: 0.65 }]} />
-        <Animated.View style={[blinkStyle, { position: 'absolute', bottom: '10%', right: '55%', width: '22%', height: '16%', backgroundColor: '#FFA2A2', borderRadius: 999, opacity: 0.65 }]} />
+        {/* Head Scales / Textures */}
+        <View style={{ position: 'absolute', top: '40%', left: '15%', width: '30%', height: '20%', backgroundColor: 'rgba(0,0,0,0.15)', borderRadius: 999 }} />
       </View>
     </Animated.View>
   );
@@ -229,28 +279,43 @@ const SnakeBody = memo(({ x, y, cellSize, speed, index, isEating }: any) => {
     transform: [{ translateX: animX.value }, { translateY: animY.value }, { scale: scale.value }],
   }));
 
+  // Create a subtle overlap for continuous body feel
   return (
     <Animated.View
       style={[
         {
           position: 'absolute',
-          width: cellSize - 2,
-          height: cellSize - 2,
-          margin: 1,
-          borderRadius: 999, // Circular body segments
+          width: cellSize + 2,
+          height: cellSize + 2,
+          margin: -1,
+          borderRadius: cellSize / 2.5, // Slightly rounded squares for scale look
           overflow: 'hidden',
-          backgroundColor: SNAKE_GREEN,
-          opacity: Math.max(0.4, 1 - index * 0.015),
-          shadowColor: SNAKE_GREEN,
-          shadowOffset: { width: 0, height: 0 },
-          shadowOpacity: 0.4,
-          shadowRadius: 4,
+          opacity: Math.max(0.7, 1 - index * 0.02),
           borderWidth: 1,
-          borderColor: 'rgba(255, 255, 255, 0.35)',
+          borderColor: 'rgba(0,0,0,0.3)', // Separator between segments mimicking scales
+          zIndex: 5 - (index * 0.01),
         },
         animStyle,
       ]}
-    />
+    >
+      {/* 3D Cylindrical scale gradient */}
+      <LinearGradient
+        colors={['#2E7D32', '#66BB6A', '#1B5E20']}
+        start={{ x: 0, y: 0.2 }}
+        end={{ x: 1, y: 0.8 }}
+        style={StyleSheet.absoluteFill}
+      />
+      {/* Scale highlight */}
+      <View style={{
+        position: 'absolute', 
+        top: '15%', 
+        left: '15%', 
+        width: '70%', 
+        height: '35%', 
+        backgroundColor: 'rgba(255,255,255,0.15)', 
+        borderRadius: 999 
+      }} />
+    </Animated.View>
   );
 });
 SnakeBody.displayName = 'SnakeBody';
@@ -338,10 +403,10 @@ export default function Snake() {
     setCellSize(exactCellSize);
     setBoardWidth(exactBoardWidth);
 
-    foodScale.value = withRepeat(withSequence(withTiming(1.15, { duration: 600 }), withTiming(0.95, { duration: 600 })), -1, true);
+    foodScale.value = withRepeat(withSequence(withTiming(1.08, { duration: 600 }), withTiming(0.95, { duration: 600 })), -1, true);
     foodFloat.value = withRepeat(
       withSequence(
-        withTiming(-4, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
+        withTiming(-5, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
         withTiming(0, { duration: 1000, easing: Easing.inOut(Easing.ease) })
       ),
       -1,
@@ -410,13 +475,13 @@ export default function Snake() {
   }, [food, difficulty, cellSize, foodType]);
 
   const spawnParticles = (x: number, y: number, color: string) => {
-    const newParticles = Array.from({ length: 10 }).map((_, i) => ({
+    const newParticles = Array.from({ length: 12 }).map((_, i) => ({
       id: particleIdRef.current++,
       x,
       y,
-      color: i % 2 === 0 ? SNAKE_GREEN : color,
+      color: i % 2 === 0 ? '#4C9A2A' : color,
     }));
-    setParticles((p) => [...p, ...newParticles].slice(-30));
+    setParticles((p) => [...p, ...newParticles].slice(-40));
   };
 
   useEffect(() => {
@@ -531,7 +596,7 @@ export default function Snake() {
 
   return (
     <View style={styles.root}>
-      <AnimatedBackground />
+      <CyberBackground autoScroll />
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         <GameHeader title={`SNAKE - ${difficulty}`} score={score} highScore={highScore} accentColor={SNAKE_GREEN} onBack={() => router.back()} />
 
@@ -562,7 +627,7 @@ export default function Snake() {
                 <TouchableOpacity
                   key={d}
                   onPress={() => setDifficulty(d)}
-                  style={[styles.diffTab, difficulty === d && { backgroundColor: 'rgba(92,230,122,0.25)' }]}
+                  style={[styles.diffTab, difficulty === d && { backgroundColor: 'rgba(46,213,115,0.25)' }]}
                 >
                   <Text style={[styles.diffTabText, difficulty === d && { color: SNAKE_GREEN }]}>{d}</Text>
                 </TouchableOpacity>
@@ -604,43 +669,82 @@ export default function Snake() {
                   },
                 ]}
               >
-                <View style={{
-                  width: cellSize * 0.75,
-                  height: cellSize * 0.75,
-                  borderRadius: 999,
-                  backgroundColor: FRUITS[foodType].color,
-                  shadowColor: FRUITS[foodType].color,
-                  shadowOffset: { width: 0, height: 0 },
-                  shadowOpacity: 1,
-                  shadowRadius: 10,
-                  elevation: 5,
-                }}>
-                  {/* Shiny highlight */}
-                  <View style={{
-                    position: 'absolute',
-                    top: '15%',
-                    left: '15%',
-                    width: '35%',
-                    height: '25%',
-                    backgroundColor: 'rgba(255,255,255,0.7)',
-                    borderRadius: 999,
-                    transform: [{ rotate: '-30deg' }]
-                  }} />
-                </View>
-                {/* Cute green leaf on top */}
+                {/* 3D Drop Shadow */}
                 <View style={{
                   position: 'absolute',
-                  top: '5%',
-                  right: '20%',
-                  width: '35%',
-                  height: '25%',
-                  backgroundColor: '#2ED573', // Emerald green
-                  borderTopRightRadius: 10,
-                  borderBottomLeftRadius: 10,
-                  borderTopLeftRadius: 0,
-                  borderBottomRightRadius: 0,
-                  transform: [{ rotate: '15deg' }]
+                  bottom: cellSize * 0.05,
+                  width: cellSize * 0.6,
+                  height: cellSize * 0.15,
+                  backgroundColor: 'rgba(0,0,0,0.5)',
+                  borderRadius: 999,
+                  transform: [{ scaleX: 1.3 }],
                 }} />
+
+                {/* 3D Realistic Cartoon Fruit */}
+                <View style={{
+                  width: cellSize * 0.85,
+                  height: cellSize * 0.85,
+                  borderRadius: 999,
+                  backgroundColor: FRUITS[foodType].color,
+                  overflow: 'hidden',
+                  borderWidth: 1,
+                  borderColor: 'rgba(0,0,0,0.2)'
+                }}>
+                  {/* Inner Dark Shadow to fake 3D sphere */}
+                  <View style={{
+                    position: 'absolute',
+                    top: 0, left: 0, right: 0, bottom: 0,
+                    borderRadius: 999,
+                    borderWidth: cellSize * 0.15,
+                    borderColor: 'rgba(0,0,0,0.2)',
+                  }} />
+                  {/* Glossy Curved Highlight */}
+                  <View style={{
+                    position: 'absolute',
+                    top: '12%',
+                    left: '12%',
+                    width: '45%',
+                    height: '35%',
+                    backgroundColor: 'rgba(255,255,255,0.5)',
+                    borderRadius: 999,
+                    transform: [{ rotate: '-35deg' }]
+                  }} />
+                </View>
+
+                {/* Wooden Stem */}
+                <View style={{
+                  position: 'absolute',
+                  top: -cellSize * 0.05,
+                  width: '12%',
+                  height: '25%',
+                  backgroundColor: '#5D4037', // Brown
+                  borderRadius: 3,
+                  transform: [{ rotate: '15deg' }],
+                  borderWidth: 0.5,
+                  borderColor: '#3E2723'
+                }} />
+
+                {/* Detailed Tilted Leaf */}
+                <View style={{
+                  position: 'absolute',
+                  top: -cellSize * 0.08,
+                  right: '15%',
+                  width: '40%',
+                  height: '35%',
+                  backgroundColor: '#7BED9F', // Fresh green
+                  borderTopLeftRadius: 10,
+                  borderBottomRightRadius: 10,
+                  transform: [{ rotate: '-10deg' }],
+                  borderWidth: 1,
+                  borderColor: '#2ED573',
+                  shadowColor: '#000',
+                  shadowOpacity: 0.3,
+                  shadowOffset: { width: 0, height: 1 },
+                  shadowRadius: 2,
+                }}>
+                   {/* Leaf center vein */}
+                   <View style={{ position: 'absolute', left: '15%', top: '45%', width: '70%', height: 1, backgroundColor: '#2ED573', transform: [{rotate: '45deg'}]}} />
+                </View>
               </Animated.View>
 
               {snake.map((segment, index) => {
@@ -754,6 +858,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 1, // Stay beneath snake head just in case
   },
   overlayCenter: {
     alignItems: 'center',
