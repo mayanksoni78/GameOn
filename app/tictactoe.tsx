@@ -351,8 +351,21 @@ export default function TicTacToe() {
 
         <GameHeader
           title="TIC TAC TOE"
+          score={scoreX}
+          scoreLabel={mode === 'PvE' ? 'YOU (X)' : 'PLAYER X'}
+          highScore={scoreO}
+          highScoreLabel={mode === 'PvE' ? `CPU (${difficulty[0]}${difficulty.slice(1).toLowerCase()})` : 'PLAYER O'}
           accentColor={ACCENT}
           onBack={() => router.replace('/')}
+          rightContent={
+            <TouchableOpacity
+              style={[styles.midBtn, glassmorphism(), { width: 44, height: 44 }]}
+              onPress={resetBoard}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.midBtnText}>↺</Text>
+            </TouchableOpacity>
+          }
         />
 
         <ScrollView 
@@ -389,34 +402,7 @@ export default function TicTacToe() {
             )}
           </View>
 
-          {/* ── Scoreboard ────────────────────────────────────── */}
-          <View style={styles.scoreRow}>
-            <View style={[styles.scoreCard, glassmorphism(), { borderColor: `${X_COLOR}50` }]}>
-              <Text style={[styles.scoreLabel, { color: X_COLOR }]}>
-                {mode === 'PvE' ? 'YOU (X)' : 'PLAYER X'}
-              </Text>
-              <Text style={[styles.scoreNum, { color: X_COLOR, textShadowColor: X_COLOR }]}>
-                {scoreX}
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.midBtn, glassmorphism()]}
-              onPress={resetBoard}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.midBtnText}>↺</Text>
-            </TouchableOpacity>
-
-            <View style={[styles.scoreCard, glassmorphism(), { borderColor: `${O_COLOR}50` }]}>
-              <Text style={[styles.scoreLabel, { color: O_COLOR }]}>
-                {mode === 'PvE' ? `CPU (${difficulty[0]}${difficulty.slice(1).toLowerCase()})` : 'PLAYER O'}
-              </Text>
-              <Text style={[styles.scoreNum, { color: O_COLOR, textShadowColor: O_COLOR }]}>
-                {scoreO}
-              </Text>
-            </View>
-          </View>
+          {/* Scoreboard moved to GameHeader */}
 
           {/* ── Turn / Result indicator ───────────────────────── */}
           <View style={styles.turnRow}>

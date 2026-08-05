@@ -323,7 +323,7 @@ export default function Tetris() {
       case ' ': hardDrop(); break;
       case 'Shift': holdPiece(); break;
     }
-  }, [gameOver, gameStarted, isPaused]);
+  }, { disableRepeat: false, preventDefault: true });
 
   // Gestures for Mobile
   const panGesture = Gesture.Pan()

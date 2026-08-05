@@ -365,8 +365,21 @@ export default function Connect4() {
 
         <GameHeader
           title="CONNECT 4"
+          score={scoreP1}
+          scoreLabel={mode === 'PvE' ? 'YOU (P1)' : 'PLAYER 1'}
+          highScore={scoreP2}
+          highScoreLabel={mode === 'PvE' ? `CPU` : 'PLAYER 2'}
           accentColor={ACCENT}
           onBack={() => router.replace('/')}
+          rightContent={
+            <TouchableOpacity
+              style={[styles.midBtn, glassmorphism(), { width: 44, height: 44 }]}
+              onPress={resetBoard}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.midBtnText}>↺</Text>
+            </TouchableOpacity>
+          }
         />
 
         <ScrollView 
@@ -391,20 +404,7 @@ export default function Connect4() {
             )}
           </View>
 
-          {/* ── Score ─── */}
-          <View style={styles.scoreRow}>
-            <View style={[styles.scoreCard, glassmorphism(), { borderColor: `${P1_COLOR}50` }]}>
-              <Text style={[styles.scoreLabel, { color: P1_COLOR }]}>{mode === 'PvE' ? 'YOU' : 'P1'}</Text>
-              <Text style={[styles.scoreNum, { color: P1_COLOR, textShadowColor: P1_COLOR }]}>{scoreP1}</Text>
-            </View>
-            <TouchableOpacity style={[styles.midBtn, glassmorphism()]} onPress={resetBoard} activeOpacity={0.8}>
-              <Text style={styles.midBtnText}>↺</Text>
-            </TouchableOpacity>
-            <View style={[styles.scoreCard, glassmorphism(), { borderColor: `${P2_COLOR}50` }]}>
-              <Text style={[styles.scoreLabel, { color: P2_COLOR }]}>{mode === 'PvE' ? `CPU` : 'P2'}</Text>
-              <Text style={[styles.scoreNum, { color: P2_COLOR, textShadowColor: P2_COLOR }]}>{scoreP2}</Text>
-            </View>
-          </View>
+          {/* Scoreboard moved to GameHeader */}
 
           {/* ── Turn Indicator ─── */}
           <View style={styles.turnRow}>

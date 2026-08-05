@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -12,7 +13,6 @@ import Animated, {
   withSpring,
   withTiming,
   Easing,
-  runOnJS,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, glassmorphism, elegantShadow } from '../theme/colors';
@@ -45,6 +45,10 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
   const scale = useSharedValue(0.8);
   const opacity = useSharedValue(0);
 
+  const { width: windowWidth } = useWindowDimensions();
+  const isMobile = windowWidth < 480;
+  const modalMaxWidth = isMobile ? windowWidth - 40 : 420;
+
   useEffect(() => {
     if (visible) {
       opacity.value = withTiming(1, { duration: 300, easing: Easing.out(Easing.ease) });
@@ -70,13 +74,27 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
     <Modal visible={visible} transparent animationType="none">
       <Animated.View style={[styles.overlay, overlayStyle]}>
         
-        <Animated.View style={[styles.modalContent, modalStyle, { borderColor: accentColor }]}>
+        <Animated.View style={[
+          styles.modalContent, 
+          modalStyle, 
+          { 
+            maxWidth: modalMaxWidth,
+            borderLeftWidth: 4,
+            borderLeftColor: accentColor,
+            borderWidth: 1,
+            borderColor: `${accentColor}4D`,
+            shadowColor: accentColor,
+            shadowOpacity: 0.3,
+            shadowRadius: 20,
+            elevation: 10,
+          }
+        ]}>
           
           <Text style={[styles.title, { color: accentColor }]}>{title}</Text>
           
           <View style={styles.scoreSection}>
             <Text style={styles.scoreLabel}>FINAL SCORE</Text>
-            <Text style={styles.scoreValue}>{score}</Text>
+            <Text style={[styles.scoreValue, { fontSize: isMobile ? FontSize['3xl'] : FontSize['5xl'] }]}>{score}</Text>
             
             {isNewHighScore && (
               <View style={[styles.newRecordBadge, { backgroundColor: Colors.accent.warning }]}>
@@ -102,7 +120,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             </View>
           )}
 
-          <View style={styles.actions}>
+          <View style={[styles.actions, { flexDirection: isMobile ? 'column' : 'row' }]}>
             <Pressable
               onPress={onHome}
               style={({ pressed }) => [
@@ -145,12 +163,10 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     width: '100%',
-    maxWidth: 400,
     backgroundColor: Colors.bg.card,
     borderRadius: Radius.xl,
     padding: Spacing[6],
     alignItems: 'center',
-    borderTopWidth: 4,
     ...elegantShadow(0.5, 20, 10),
   },
   title: {
@@ -171,7 +187,6 @@ const styles = StyleSheet.create({
   },
   scoreValue: {
     fontFamily: Fonts.heading,
-    fontSize: FontSize['5xl'],
     color: Colors.text.primary,
   },
   newRecordBadge: {
@@ -213,7 +228,6 @@ const styles = StyleSheet.create({
   },
   actions: {
     width: '100%',
-    flexDirection: 'row',
     gap: Spacing[4],
   },
   button: {
@@ -224,6 +238,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing[4],
     borderRadius: Radius.full,
     gap: Spacing[2],
+    minHeight: 48,
   },
   homeButton: {
     backgroundColor: 'rgba(255,255,255,0.05)',

@@ -15,26 +15,28 @@ interface PremiumIconProps {
   id: IconId;
   color: string;
   size?: number;
+  fullBleed?: boolean;
 }
 
 // Map each game to its custom-generated cartoon icon asset
 const ICON_IMAGES: Record<IconId, ImageSourcePropType> = {
-  snake:      require('../../assets/images/icon_snake.jpg'),
-  tetris:     require('../../assets/images/icon_tetris.jpg'),
-  '2048':     require('../../assets/images/icon_game2048.jpg'),
-  tictactoe:  require('../../assets/images/icon_tictactoe.jpg'),
-  flappybird: require('../../assets/images/icon_flappybird.jpg'),
-  connect4:   require('../../assets/images/icon_connect4.jpg'),
-  bingo:      require('../../assets/images/icon_pacman.jpg'),
-  sudoku:     require('../../assets/images/icon_sudoku.jpg'),
-  dinojump:   require('../../assets/images/icon_dinojump.jpg'),
-  blockoduko: require('../../assets/images/icon_blockoduko.jpg'),
+  snake:      require('../../assets/images/icon_snake.png'),
+  tetris:     require('../../assets/images/icon_tetris.png'),
+  '2048':     require('../../assets/images/icon_2048.png'),
+  tictactoe:  require('../../assets/images/icon_tictactoe.png'),
+  flappybird: require('../../assets/images/icon_flappybird.png'),
+  connect4:   require('../../assets/images/icon_connect4.png'),
+  bingo:      require('../../assets/images/icon_tomandjerry.png'),
+  sudoku:     require('../../assets/images/icon_sudoku.png'),
+  dinojump:   require('../../assets/images/icon_dinojump.png'),
+  blockoduko: require('../../assets/images/icon_blockoduko.png'),
 };
 
-export const PremiumIcon: React.FC<PremiumIconProps> = ({ id, color, size = 40 }) => {
+export const PremiumIcon: React.FC<PremiumIconProps> = ({ id, color, size = 40, fullBleed = false }) => {
   const translateY = useSharedValue(0);
 
   useEffect(() => {
+    if (fullBleed) return;
     // Add a random delay so they don't all float synchronously
     const delay = Math.random() * 1000;
     setTimeout(() => {
@@ -47,7 +49,7 @@ export const PremiumIcon: React.FC<PremiumIconProps> = ({ id, color, size = 40 }
             true
         );
     }, delay);
-  }, []);
+  }, [fullBleed]);
 
   const floatingStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
@@ -56,21 +58,23 @@ export const PremiumIcon: React.FC<PremiumIconProps> = ({ id, color, size = 40 }
   const imageSource = ICON_IMAGES[id];
 
   return (
-    <Animated.View style={[styles.container, floatingStyle, { width: size, height: size }]}>
-      {/* Glow Effect behind the icon */}
-      <View style={[
-          StyleSheet.absoluteFillObject, 
-          styles.glow,
-          { shadowColor: color, shadowRadius: size * 0.4 }
-      ]} />
+    <Animated.View style={[styles.container, fullBleed ? {} : floatingStyle, { width: size, height: size }]}>
+      {/* Glow Effect behind the icon (disabled in full bleed) */}
+      {!fullBleed && (
+        <View style={[
+            StyleSheet.absoluteFillObject, 
+            styles.glow,
+            { shadowColor: color, shadowRadius: size * 0.4 }
+        ]} />
+      )}
       
       {/* The premium generated cartoon icon */}
       <Image 
           source={imageSource}
           style={{ 
-            width: size * 0.85, 
-            height: size * 0.85, 
-            borderRadius: size * 0.2,
+            width: fullBleed ? '100%' : size * 0.85, 
+            height: fullBleed ? '100%' : size * 0.85, 
+            borderRadius: fullBleed ? 0 : size * 0.2,
           }}
           resizeMode="cover"
       />

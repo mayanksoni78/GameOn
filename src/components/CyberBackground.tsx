@@ -20,7 +20,7 @@ const MOUNTAIN_M = '#0E0820'; // Mid mountains (deep purple)
 const MOUNTAIN_2 = '#160E2A'; // Near mountains (dark indigo)
 
 // ── Twinkling Star / Spark Component ──
-const TwinklingStar = React.memo(({ x, y, size, minOpacity, maxOpacity, duration }) => {
+const TwinklingStar = React.memo(({ x, y, size, minOpacity, maxOpacity, duration }: { x: number, y: number, size: number, minOpacity: number, maxOpacity: number, duration: number }) => {
   const opacity = useSharedValue(minOpacity);
   
   useEffect(() => {
@@ -71,7 +71,12 @@ const CloudShape = ({ scale = 1, baseOpacity = 1 }) => (
   </View>
 );
 
-export const CyberBackground = React.memo(({ scrollOffset, autoScroll = false }) => {
+interface CyberBackgroundProps {
+  scrollOffset?: Animated.SharedValue<number>;
+  autoScroll?: boolean;
+}
+
+export const CyberBackground = React.memo(({ scrollOffset, autoScroll = false }: CyberBackgroundProps) => {
   
   const localScroll = useSharedValue(0);
   useEffect(() => {
@@ -116,7 +121,7 @@ export const CyberBackground = React.memo(({ scrollOffset, autoScroll = false })
   }, []);
 
   // ── Clouds ──
-  const renderClouds = (yOffset, scaleRange, count, speedMultiplier, opacity = 1) => {
+  const renderClouds = (yOffset: number, scaleRange: number[], count: number, speedMultiplier: number, opacity: number = 1) => {
     const clouds = useMemo(() => Array.from({ length: count }).map((_, i) => ({
       x: (i * (100 / count)) + (Math.random() * 15 - 7.5),
       scale: Math.random() * (scaleRange[1] - scaleRange[0]) + scaleRange[0],
@@ -150,7 +155,7 @@ export const CyberBackground = React.memo(({ scrollOffset, autoScroll = false })
   };
 
   // ── Mountains ──
-  const renderMountains = (color, yOffset, scaleY, count, speedMultiplier, extraOffset = 0) => {
+  const renderMountains = (color: string, yOffset: number, scaleY: number, count: number, speedMultiplier: number, extraOffset: number = 0) => {
     const peaks = useMemo(() => Array.from({ length: count }).map((_, i) => ({
       x: (i * (120 / count)) - 10,
       w: Math.random() * 160 + 120, 

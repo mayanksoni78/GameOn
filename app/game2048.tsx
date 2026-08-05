@@ -325,7 +325,7 @@ export default function Game2048() {
       case 'ArrowLeft': case 'a': case 'A': move('LEFT'); break;
       case 'ArrowRight': case 'd': case 'D': move('RIGHT'); break;
     }
-  }, [gameOver, gameStarted, isPaused, move]);
+  }, { disableRepeat: true, preventDefault: true });
 
   if (board.length === 0) return null;
 

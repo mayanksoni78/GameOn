@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, TouchableOpacity, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -18,9 +18,14 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
-// ---- Theme constants ----
-const SNAKE_GREEN = '#2ED573'; // Updated to a richer cartoon green for UI elements
-const PURPLE_GLOW = '#A855F7';
+// ---- Theme Constants ----
+const ACCENT_WHITE = '#FFFFFF';
+const DARK_BLUE_BG = '#0B132B';
+const DARK_PURPLE_BG = '#1C0B2B';
+
+// Realistic Snake Color Palette
+const SNAKE_MAIN = '#2E7D32'; 
+const SNAKE_SHADOW = '#1B5E20';
 const GRID_SIZE = 20;
 
 type Coordinate = { x: number; y: number };
@@ -34,27 +39,59 @@ const SPEED_MAP = {
 };
 
 const FRUITS = [
-  { name: 'food-apple', color: '#FF4757', points: 1, label: 'Apple' },       // shiny red Apple
-  { name: 'fruit-citrus', color: '#FFA502', points: 2, label: 'Orange' },    // bright Orange
+  { name: 'food-apple', color: '#EF4444', points: 1, label: 'APPLE' },
+  { name: 'fruit-citrus', color: '#F97316', points: 2, label: 'ORANGE' },
 ] as const;
 
 // ---------------------------------------------------------------------------
-// Board background: Grid cells with explicit white borders & alternating fill
+// 3D Fruit Graphic
+// ---------------------------------------------------------------------------
+const Fruit3DGraphic = ({ size, color }: { size: number; color: string }) => {
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{
+        width: size * 0.85,
+        height: size * 0.85,
+        borderRadius: 999,
+        backgroundColor: color,
+        overflow: 'hidden',
+        borderWidth: size * 0.05,
+        borderColor: 'rgba(255,255,255,0.4)',
+        shadowColor: color,
+        shadowOpacity: 0.6,
+        shadowRadius: size * 0.2,
+      }}>
+        <View style={{
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          borderRadius: 999, borderWidth: size * 0.15, borderColor: 'rgba(0,0,0,0.2)',
+        }} />
+        <View style={{
+          position: 'absolute', top: '12%', left: '12%', width: '45%', height: '35%',
+          backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: 999, transform: [{ rotate: '-35deg' }]
+        }} />
+      </View>
+      <View style={{
+        position: 'absolute', top: -size * 0.02, width: '12%', height: '25%',
+        backgroundColor: '#78350F', borderRadius: 3, transform: [{ rotate: '15deg' }],
+      }} />
+      <View style={{
+        position: 'absolute', top: -size * 0.05, right: '15%', width: '40%', height: '35%',
+        backgroundColor: SNAKE_MAIN, borderTopLeftRadius: size * 0.2, borderBottomRightRadius: size * 0.2,
+        transform: [{ rotate: '-10deg' }], borderWidth: 1, borderColor: SNAKE_SHADOW,
+      }}>
+         <View style={{ position: 'absolute', left: '15%', top: '45%', width: '70%', height: 1, backgroundColor: SNAKE_SHADOW, transform: [{ rotate: '45deg' }] }} />
+      </View>
+    </View>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Board background with Crisp White Grid Borders
 // ---------------------------------------------------------------------------
 const BoardBackground = memo(({ boardWidth, cellSize }: { boardWidth: number; cellSize: number }) => {
   return (
     <>
-      <LinearGradient
-        colors={['#12061F', '#1A0F2E', '#24123D']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-      {/* Ambient corner glows */}
-      <View pointerEvents="none" className="absolute -top-12 -left-12 w-40 h-40 rounded-full bg-purple-600/20" />
-      <View pointerEvents="none" className="absolute -bottom-16 -right-10 w-52 h-52 rounded-full bg-purple-500/10" />
-
-      {/* Grid cells with explicit individual white borders */}
+      <LinearGradient colors={[DARK_BLUE_BG, '#120D31', DARK_PURPLE_BG]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, { flexDirection: 'row', flexWrap: 'wrap' }]}>
         {Array.from({ length: GRID_SIZE * GRID_SIZE }).map((_, i) => {
           const dark = (Math.floor(i / GRID_SIZE) + i) % 2 === 0;
@@ -64,9 +101,9 @@ const BoardBackground = memo(({ boardWidth, cellSize }: { boardWidth: number; ce
               style={{
                 width: cellSize,
                 height: cellSize,
-                backgroundColor: dark ? 'rgba(0,0,0,0.18)' : 'rgba(0,0,0,0.08)',
+                backgroundColor: dark ? 'rgba(15, 23, 42, 0.4)' : 'rgba(30, 27, 75, 0.25)',
                 borderWidth: 0.5,
-                borderColor: 'rgba(255, 255, 255, 0.15)',
+                borderColor: 'rgba(255, 255, 255, 0.15)', // White Grid Border
               }}
             />
           );
@@ -76,6 +113,10 @@ const BoardBackground = memo(({ boardWidth, cellSize }: { boardWidth: number; ce
   );
 });
 BoardBackground.displayName = 'BoardBackground';
+
+// ---------------------------------------------------------------------------
+// Realistic Cartoon Style Snake Head & Body Components
+// ---------------------------------------------------------------------------
 
 // Snake head — Realistic Cartoon Style: Snout, Reptile Eyes, Slit Pupils, Forked Tongue
 const SnakeHead = ({ x, y, cellSize, speed, direction }: any) => {
@@ -143,7 +184,7 @@ const SnakeHead = ({ x, y, cellSize, speed, direction }: any) => {
           position: 'absolute',
           width: cellSize,
           height: cellSize,
-          zIndex: 10,
+          zIndex: 100,
         },
         animStyle,
       ]}
@@ -176,7 +217,7 @@ const SnakeHead = ({ x, y, cellSize, speed, direction }: any) => {
           margin: 0,
           borderTopLeftRadius: cellSize * 0.4,
           borderBottomLeftRadius: cellSize * 0.4,
-          borderTopRightRadius: cellSize * 0.25, // Snout shape
+          borderTopRightRadius: cellSize * 0.25,
           borderBottomRightRadius: cellSize * 0.25,
           overflow: 'hidden',
           backgroundColor: '#1E5631',
@@ -205,7 +246,7 @@ const SnakeHead = ({ x, y, cellSize, speed, direction }: any) => {
               right: '25%',
               width: '35%',
               height: '30%',
-              backgroundColor: '#FFD700', // Glowing yellow eye
+              backgroundColor: '#FFD700',
               borderRadius: 999,
               alignItems: 'center',
               justifyContent: 'center',
@@ -233,7 +274,7 @@ const SnakeHead = ({ x, y, cellSize, speed, direction }: any) => {
               right: '25%',
               width: '35%',
               height: '30%',
-              backgroundColor: '#FFD700', // Glowing yellow eye
+              backgroundColor: '#FFD700',
               borderRadius: 999,
               alignItems: 'center',
               justifyContent: 'center',
@@ -256,6 +297,7 @@ const SnakeHead = ({ x, y, cellSize, speed, direction }: any) => {
   );
 };
 
+// Snake Body — Elegant & Color Matched with Head
 const SnakeBody = memo(({ x, y, cellSize, speed, index, isEating }: any) => {
   const animX = useSharedValue(x * cellSize);
   const animY = useSharedValue(y * cellSize);
@@ -269,7 +311,7 @@ const SnakeBody = memo(({ x, y, cellSize, speed, index, isEating }: any) => {
   useEffect(() => {
     if (isEating) {
       scale.value = withSequence(
-        withTiming(1.2, { duration: speed / 2 }),
+        withTiming(1.18, { duration: speed / 2 }),
         withTiming(1, { duration: speed / 2 })
       );
     }
@@ -279,41 +321,61 @@ const SnakeBody = memo(({ x, y, cellSize, speed, index, isEating }: any) => {
     transform: [{ translateX: animX.value }, { translateY: animY.value }, { scale: scale.value }],
   }));
 
-  // Create a subtle overlap for continuous body feel
   return (
     <Animated.View
       style={[
         {
           position: 'absolute',
-          width: cellSize + 2,
-          height: cellSize + 2,
-          margin: -1,
-          borderRadius: cellSize / 2.5, // Slightly rounded squares for scale look
+          width: cellSize + 1,
+          height: cellSize + 1,
+          margin: -0.5,
+          borderRadius: cellSize * 0.35, // Organic snake segment curve
           overflow: 'hidden',
-          opacity: Math.max(0.7, 1 - index * 0.02),
           borderWidth: 1,
-          borderColor: 'rgba(0,0,0,0.3)', // Separator between segments mimicking scales
-          zIndex: 5 - (index * 0.01),
+          borderColor: 'rgba(15, 45, 18, 0.45)', // Rich organic scale outline
+          zIndex: Math.max(1, 80 - index),
         },
         animStyle,
       ]}
     >
-      {/* 3D Cylindrical scale gradient */}
+      {/* 100% Color-Matched Gradient identical to Snake Head palette */}
       <LinearGradient
-        colors={['#2E7D32', '#66BB6A', '#1B5E20']}
-        start={{ x: 0, y: 0.2 }}
-        end={{ x: 1, y: 0.8 }}
+        colors={['#4C9A2A', '#2E7D32', '#1B5E20']}
+        start={{ x: 0.2, y: 0 }}
+        end={{ x: 0.8, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
-      {/* Scale highlight */}
+
+      {/* Elegant 3D Specular Highlight on Scale Top */}
       <View style={{
         position: 'absolute', 
-        top: '15%', 
+        top: '10%', 
         left: '15%', 
         width: '70%', 
-        height: '35%', 
-        backgroundColor: 'rgba(255,255,255,0.15)', 
+        height: '32%', 
+        backgroundColor: 'rgba(255, 255, 255, 0.25)', 
         borderRadius: 999 
+      }} />
+
+      {/* Dorsal Spine Ridge Highlight */}
+      <View style={{
+        position: 'absolute', 
+        top: '38%', 
+        left: '20%', 
+        width: '60%', 
+        height: '14%', 
+        backgroundColor: 'rgba(76, 154, 42, 0.35)', 
+        borderRadius: 999 
+      }} />
+
+      {/* Bottom Shadow for Organic Cylinder Depth */}
+      <View style={{
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: '28%',
+        backgroundColor: 'rgba(0, 0, 0, 0.22)',
       }} />
     </Animated.View>
   );
@@ -392,7 +454,7 @@ export default function Snake() {
     });
 
     const hPad = 32;
-    const vPad = 200;
+    const vPad = 220;
     const maxSize = 500;
     
     const available = Math.min(SCREEN_W - hPad * 2, SCREEN_H - vPad);
@@ -421,25 +483,14 @@ export default function Snake() {
     const newHead = { ...currentHead };
 
     switch (directionRef.current) {
-      case 'UP':
-        newHead.y -= 1;
-        break;
-      case 'DOWN':
-        newHead.y += 1;
-        break;
-      case 'LEFT':
-        newHead.x -= 1;
-        break;
-      case 'RIGHT':
-        newHead.x += 1;
-        break;
+      case 'UP': newHead.y -= 1; break;
+      case 'DOWN': newHead.y += 1; break;
+      case 'LEFT': newHead.x -= 1; break;
+      case 'RIGHT': newHead.x += 1; break;
     }
 
     if (
-      newHead.x < 0 ||
-      newHead.x >= GRID_SIZE ||
-      newHead.y < 0 ||
-      newHead.y >= GRID_SIZE ||
+      newHead.x < 0 || newHead.x >= GRID_SIZE || newHead.y < 0 || newHead.y >= GRID_SIZE ||
       snakeRef.current.some((segment, index) => index !== snakeRef.current.length - 1 && segment.x === newHead.x && segment.y === newHead.y)
     ) {
       handleGameOver();
@@ -479,7 +530,7 @@ export default function Snake() {
       id: particleIdRef.current++,
       x,
       y,
-      color: i % 2 === 0 ? '#4C9A2A' : color,
+      color: i % 2 === 0 ? ACCENT_WHITE : color,
     }));
     setParticles((p) => [...p, ...newParticles].slice(-40));
   };
@@ -530,10 +581,8 @@ export default function Snake() {
     if (isPausedRef.current || !gameStartedRef.current) return;
     const current = directionRef.current;
     if (
-      (newDir === 'UP' && current !== 'DOWN') ||
-      (newDir === 'DOWN' && current !== 'UP') ||
-      (newDir === 'LEFT' && current !== 'RIGHT') ||
-      (newDir === 'RIGHT' && current !== 'LEFT')
+      (newDir === 'UP' && current !== 'DOWN') || (newDir === 'DOWN' && current !== 'UP') ||
+      (newDir === 'LEFT' && current !== 'RIGHT') || (newDir === 'RIGHT' && current !== 'LEFT')
     ) {
       setDirection(newDir);
     }
@@ -547,32 +596,13 @@ export default function Snake() {
       return;
     }
     switch (key) {
-      case 'ArrowUp':
-      case 'w':
-      case 'W':
-        handleDirectionChange('UP');
-        break;
-      case 'ArrowDown':
-      case 's':
-      case 'S':
-        handleDirectionChange('DOWN');
-        break;
-      case 'ArrowLeft':
-      case 'a':
-      case 'A':
-        handleDirectionChange('LEFT');
-        break;
-      case 'ArrowRight':
-      case 'd':
-      case 'D':
-        handleDirectionChange('RIGHT');
-        break;
-      case 'Escape':
-      case ' ':
-        togglePause();
-        break;
+      case 'ArrowUp': case 'w': case 'W': handleDirectionChange('UP'); break;
+      case 'ArrowDown': case 's': case 'S': handleDirectionChange('DOWN'); break;
+      case 'ArrowLeft': case 'a': case 'A': handleDirectionChange('LEFT'); break;
+      case 'ArrowRight': case 'd': case 'D': handleDirectionChange('RIGHT'); break;
+      case 'Escape': case ' ': togglePause(); break;
     }
-  }, [isGameOver, gameStarted, isPaused]);
+  }, { disableRepeat: true, preventDefault: true });
 
   const panGesture = Gesture.Pan()
     .activeOffsetX([-20, 20])
@@ -598,173 +628,85 @@ export default function Snake() {
     <View style={styles.root}>
       <CyberBackground autoScroll />
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <GameHeader title={`SNAKE - ${difficulty}`} score={score} highScore={highScore} accentColor={SNAKE_GREEN} onBack={() => router.back()} />
+        <GameHeader title={`SNAKE - ${difficulty}`} score={score} highScore={highScore} accentColor={ACCENT_WHITE} onBack={() => router.back()} />
 
         <View style={styles.controlBar}>
-          <TouchableOpacity 
-            style={[styles.controlBtn, !gameStarted || isPaused ? { backgroundColor: SNAKE_GREEN } : glassmorphism()]} 
-            onPress={!gameStarted ? startGame : (isPaused ? togglePause : undefined)}
-          >
-            <MaterialCommunityIcons name="play" size={24} color={!gameStarted || isPaused ? "#000" : Colors.white} />
-            <Text style={[styles.controlBtnText, { color: !gameStarted || isPaused ? '#000' : Colors.white }]}>{!gameStarted ? 'START' : 'RESUME'}</Text>
+          <TouchableOpacity style={[styles.controlBtn, !gameStarted || isPaused ? { backgroundColor: ACCENT_WHITE } : styles.glassCard]} onPress={!gameStarted ? startGame : (isPaused ? togglePause : undefined)}>
+            <MaterialCommunityIcons name="play" size={22} color={!gameStarted || isPaused ? DARK_BLUE_BG : ACCENT_WHITE} />
+            <Text style={[styles.controlBtnText, { color: !gameStarted || isPaused ? DARK_BLUE_BG : ACCENT_WHITE }]}>{!gameStarted ? 'START' : 'RESUME'}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={[styles.controlBtn, glassmorphism(), (!gameStarted || isPaused) && { opacity: 0.5 }]} 
-            onPress={gameStarted && !isPaused ? togglePause : undefined}
-          >
-            <MaterialCommunityIcons name="pause" size={24} color={Colors.white} />
+          <TouchableOpacity style={[styles.controlBtn, styles.glassCard, (!gameStarted || isPaused) && { opacity: 0.5 }]} onPress={gameStarted && !isPaused ? togglePause : undefined}>
+            <MaterialCommunityIcons name="pause" size={22} color={ACCENT_WHITE} />
             <Text style={styles.controlBtnText}>PAUSE</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.controlBtn, glassmorphism()]} onPress={restartGame}>
-            <MaterialCommunityIcons name="refresh" size={24} color={Colors.white} />
+          <TouchableOpacity style={[styles.controlBtn, styles.glassCard]} onPress={restartGame}>
+            <MaterialCommunityIcons name="refresh" size={22} color={ACCENT_WHITE} />
           </TouchableOpacity>
 
           {!gameStarted && (
             <View style={styles.diffSelector}>
               {(['EASY', 'MEDIUM', 'HARD'] as Difficulty[]).map((d) => (
-                <TouchableOpacity
-                  key={d}
-                  onPress={() => setDifficulty(d)}
-                  style={[styles.diffTab, difficulty === d && { backgroundColor: 'rgba(46,213,115,0.25)' }]}
-                >
-                  <Text style={[styles.diffTabText, difficulty === d && { color: SNAKE_GREEN }]}>{d}</Text>
+                <TouchableOpacity key={d} onPress={() => setDifficulty(d)} style={[styles.diffTab, difficulty === d && styles.diffTabActive]}>
+                  <Text style={[styles.diffTabText, difficulty === d && styles.diffTabTextActive]}>{d}</Text>
                 </TouchableOpacity>
               ))}
             </View>
           )}
         </View>
 
-        <View style={styles.legendRow}>
-          {FRUITS.map((fruit, idx) => (
-            <View key={idx} style={styles.legendItem}>
-              <MaterialCommunityIcons name={fruit.name as any} size={16} color={fruit.color} />
-              <Text style={styles.legendText}>+{fruit.points}</Text>
-            </View>
-          ))}
+        <View style={styles.foodHeaderContainer}>
+          <View style={styles.foodHeaderPanel}>
+            {FRUITS.map((fruit, idx) => (
+              <React.Fragment key={idx}>
+                <View style={styles.foodHeaderItem}>
+                  <View style={[styles.foodIconWrapper, { backgroundColor: `${fruit.color}15`, borderColor: `${fruit.color}50` }]}>
+                    <Fruit3DGraphic size={22} color={fruit.color} />
+                  </View>
+                  <View style={styles.foodTextWrapper}>
+                    <Text style={styles.foodLabelText}>{fruit.label}</Text>
+                    <Text style={[styles.foodPointsText, { color: fruit.color }]}>+{fruit.points} PTS</Text>
+                  </View>
+                </View>
+                {idx < FRUITS.length - 1 && <View style={styles.foodDivider} />}
+              </React.Fragment>
+            ))}
+          </View>
         </View>
 
         <GestureDetector gesture={panGesture}>
           <View style={styles.boardWrapper}>
-            <View
-              className="rounded-3xl overflow-hidden border-2 border-white/20"
-              style={[{ width: boardWidth, height: boardWidth }, elegantShadow(0.45, 24, 12), { shadowColor: PURPLE_GLOW }]}
-            >
+            <View className="rounded-3xl overflow-hidden border-2 border-white/20" style={[{ width: boardWidth, height: boardWidth }, elegantShadow(0.5, 28, 14), { shadowColor: '#34D399' }]}>
+              
               <BoardBackground boardWidth={boardWidth} cellSize={cellSize} />
 
               {particles.map((p) => (
                 <Particle key={p.id} x={p.x} y={p.y} color={p.color} />
               ))}
 
-              <Animated.View
-                style={[
-                  styles.foodWrapper,
-                  foodAnimStyle,
-                  {
-                    width: cellSize,
-                    height: cellSize,
-                    left: food.x * cellSize,
-                    top: food.y * cellSize,
-                  },
-                ]}
-              >
-                {/* 3D Drop Shadow */}
-                <View style={{
-                  position: 'absolute',
-                  bottom: cellSize * 0.05,
-                  width: cellSize * 0.6,
-                  height: cellSize * 0.15,
-                  backgroundColor: 'rgba(0,0,0,0.5)',
-                  borderRadius: 999,
-                  transform: [{ scaleX: 1.3 }],
-                }} />
-
-                {/* 3D Realistic Cartoon Fruit */}
-                <View style={{
-                  width: cellSize * 0.85,
-                  height: cellSize * 0.85,
-                  borderRadius: 999,
-                  backgroundColor: FRUITS[foodType].color,
-                  overflow: 'hidden',
-                  borderWidth: 1,
-                  borderColor: 'rgba(0,0,0,0.2)'
-                }}>
-                  {/* Inner Dark Shadow to fake 3D sphere */}
-                  <View style={{
-                    position: 'absolute',
-                    top: 0, left: 0, right: 0, bottom: 0,
-                    borderRadius: 999,
-                    borderWidth: cellSize * 0.15,
-                    borderColor: 'rgba(0,0,0,0.2)',
-                  }} />
-                  {/* Glossy Curved Highlight */}
-                  <View style={{
-                    position: 'absolute',
-                    top: '12%',
-                    left: '12%',
-                    width: '45%',
-                    height: '35%',
-                    backgroundColor: 'rgba(255,255,255,0.5)',
-                    borderRadius: 999,
-                    transform: [{ rotate: '-35deg' }]
-                  }} />
-                </View>
-
-                {/* Wooden Stem */}
-                <View style={{
-                  position: 'absolute',
-                  top: -cellSize * 0.05,
-                  width: '12%',
-                  height: '25%',
-                  backgroundColor: '#5D4037', // Brown
-                  borderRadius: 3,
-                  transform: [{ rotate: '15deg' }],
-                  borderWidth: 0.5,
-                  borderColor: '#3E2723'
-                }} />
-
-                {/* Detailed Tilted Leaf */}
-                <View style={{
-                  position: 'absolute',
-                  top: -cellSize * 0.08,
-                  right: '15%',
-                  width: '40%',
-                  height: '35%',
-                  backgroundColor: '#7BED9F', // Fresh green
-                  borderTopLeftRadius: 10,
-                  borderBottomRightRadius: 10,
-                  transform: [{ rotate: '-10deg' }],
-                  borderWidth: 1,
-                  borderColor: '#2ED573',
-                  shadowColor: '#000',
-                  shadowOpacity: 0.3,
-                  shadowOffset: { width: 0, height: 1 },
-                  shadowRadius: 2,
-                }}>
-                   {/* Leaf center vein */}
-                   <View style={{ position: 'absolute', left: '15%', top: '45%', width: '70%', height: 1, backgroundColor: '#2ED573', transform: [{rotate: '45deg'}]}} />
-                </View>
+              <Animated.View style={[styles.foodWrapper, foodAnimStyle, { width: cellSize, height: cellSize, left: food.x * cellSize, top: food.y * cellSize }]}>
+                <View style={{ position: 'absolute', bottom: cellSize * 0.05, width: cellSize * 0.6, height: cellSize * 0.15, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 999, transform: [{ scaleX: 1.3 }] }} />
+                <Fruit3DGraphic size={cellSize} color={FRUITS[foodType].color} />
               </Animated.View>
 
+              {/* Render tail first, head last so overlaps look perfect */}
               {snake.map((segment, index) => {
                 if (index === 0) return null;
-                return (
-                  <SnakeBody key={index} x={segment.x} y={segment.y} cellSize={cellSize} speed={SPEED_MAP[difficulty]} index={index} isEating={isEating} />
-                );
-              })}
+                return <SnakeBody key={index} x={segment.x} y={segment.y} cellSize={cellSize} speed={SPEED_MAP[difficulty]} index={index} isEating={isEating} />;
+              }).reverse()}
 
               <SnakeHead x={snake[0].x} y={snake[0].y} cellSize={cellSize} speed={SPEED_MAP[difficulty]} direction={direction} />
 
               {!gameStarted && !isGameOver && (
                 <View style={[StyleSheet.absoluteFill, styles.overlayCenter]}>
-                  <View className="px-6 py-4 rounded-xl border border-white/10 bg-black/60">
+                  <View style={styles.startCard}>
                     <Text style={styles.messageText}>PRESS ENTER TO START</Text>
                   </View>
                 </View>
               )}
               {isPaused && (
-                <View style={[StyleSheet.absoluteFill, styles.overlayCenter]} className="bg-black/60">
+                <View style={[StyleSheet.absoluteFill, styles.overlayCenter, { backgroundColor: 'rgba(11, 19, 43, 0.75)' }]}>
                   <Text style={[styles.messageText, { fontSize: 32 }]}>PAUSED</Text>
                 </View>
               )}
@@ -777,7 +719,7 @@ export default function Snake() {
           score={score}
           highScore={highScore}
           isNewHighScore={score >= highScore && score > 0}
-          accentColor={SNAKE_GREEN}
+          accentColor={SNAKE_MAIN}
           onRestart={restartGame}
           onHome={() => router.replace('/')}
         />
@@ -787,90 +729,28 @@ export default function Snake() {
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: Colors.bg.primary,
-  },
-  safe: {
-    flex: 1,
-  },
-  controlBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: Spacing[4],
-    paddingBottom: Spacing[2],
-    gap: Spacing[3],
-  },
-  controlBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing[4],
-    paddingVertical: Spacing[2],
-    borderRadius: Radius.full,
-    gap: Spacing[2],
-  },
-  controlBtnText: {
-    fontFamily: Fonts.heading,
-    fontSize: FontSize.sm,
-    color: Colors.white,
-  },
-  diffSelector: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: Radius.full,
-    padding: 4,
-    marginLeft: Spacing[2],
-  },
-  diffTab: {
-    paddingHorizontal: Spacing[4],
-    paddingVertical: Spacing[2],
-    borderRadius: Radius.full,
-  },
-  diffTabText: {
-    fontFamily: Fonts.heading,
-    fontSize: FontSize.sm,
-    color: Colors.text.muted,
-  },
-  legendRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: Spacing[4],
-    paddingBottom: Spacing[3],
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  legendText: {
-    fontFamily: Fonts.bodySemiBold,
-    fontSize: FontSize.xs,
-    color: Colors.text.muted,
-  },
-  boardWrapper: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingTop: Spacing[2],
-  },
-  foodWrapper: {
-    position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1, // Stay beneath snake head just in case
-  },
-  overlayCenter: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 100,
-  },
-  messageText: {
-    fontFamily: Fonts.heading,
-    fontSize: FontSize.lg,
-    color: Colors.white,
-    textShadowColor: PURPLE_GLOW,
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
-  },
+  root: { flex: 1, backgroundColor: DARK_BLUE_BG },
+  safe: { flex: 1 },
+  glassCard: { backgroundColor: 'rgba(255, 255, 255, 0.08)', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)' },
+  controlBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing[4], paddingBottom: Spacing[3], gap: Spacing[3] },
+  controlBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing[4], paddingVertical: Spacing[2], borderRadius: Radius.full, gap: Spacing[2] },
+  controlBtnText: { fontFamily: Fonts.heading, fontSize: FontSize.sm, color: ACCENT_WHITE },
+  diffSelector: { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: Radius.full, padding: 4, marginLeft: Spacing[2], borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  diffTab: { paddingHorizontal: Spacing[4], paddingVertical: Spacing[2], borderRadius: Radius.full },
+  diffTabActive: { backgroundColor: 'rgba(255,255,255,0.2)' },
+  diffTabText: { fontFamily: Fonts.heading, fontSize: FontSize.sm, color: 'rgba(255,255,255,0.5)' },
+  diffTabTextActive: { color: ACCENT_WHITE },
+  foodHeaderContainer: { alignItems: 'center', justifyContent: 'center', paddingBottom: Spacing[3], paddingHorizontal: Spacing[4] },
+  foodHeaderPanel: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-evenly', width: '100%', maxWidth: 320, backgroundColor: 'rgba(15, 23, 42, 0.7)', paddingHorizontal: Spacing[4], paddingVertical: Spacing[3], borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.12)', shadowColor: '#34D399', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 10 },
+  foodHeaderItem: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  foodIconWrapper: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
+  foodTextWrapper: { justifyContent: 'center' },
+  foodLabelText: { fontFamily: Fonts.bodySemiBold, fontSize: 10, color: 'rgba(255,255,255,0.5)', letterSpacing: 1, marginBottom: 2 },
+  foodPointsText: { fontFamily: Fonts.heading, fontSize: FontSize.sm, fontWeight: '800' },
+  foodDivider: { width: 1, height: 24, backgroundColor: 'rgba(255,255,255,0.15)' },
+  boardWrapper: { flex: 1, alignItems: 'center', justifyContent: 'flex-start', paddingTop: Spacing[1] },
+  foodWrapper: { position: 'absolute', alignItems: 'center', justifyContent: 'center', zIndex: 1 },
+  overlayCenter: { alignItems: 'center', justifyContent: 'center', zIndex: 100 },
+  startCard: { paddingHorizontal: 24, paddingVertical: 14, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.25)', backgroundColor: 'rgba(11, 19, 43, 0.85)' },
+  messageText: { fontFamily: Fonts.heading, fontSize: FontSize.lg, color: ACCENT_WHITE, textShadowColor: '#34D399', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 10 },
 });

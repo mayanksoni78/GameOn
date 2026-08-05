@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, Pressable } from 'react-native';
+import { StyleSheet, View, Text, Pressable, useWindowDimensions } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -20,6 +20,8 @@ interface ControlsOverlayProps {
 export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({ instructions, controls }) => {
   const [isOpen, setIsOpen] = useState(false);
   const animation = useSharedValue(0); // 0 = closed, 1 = open
+  const { width } = useWindowDimensions();
+  const isMobile = width < 480;
 
   const toggle = () => {
     setIsOpen(!isOpen);
@@ -30,7 +32,7 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({ instructions, 
   };
 
   const containerStyle = useAnimatedStyle(() => {
-    const height = interpolate(animation.value, [0, 1], [0, 200]); // Max height estimation
+    const height = interpolate(animation.value, [0, 1], [0, 300]); // Increased Max height estimation
     const opacity = interpolate(animation.value, [0, 0.2, 1], [0, 0, 1]);
     return {
       maxHeight: height,
@@ -47,7 +49,10 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({ instructions, 
   });
 
   return (
-    <View style={styles.container}>
+    <View style={[
+      styles.container,
+      { marginHorizontal: isMobile ? Spacing[3] : Spacing[5] }
+    ]}>
       <Pressable
         onPress={toggle}
         style={({ pressed }) => [
@@ -74,7 +79,10 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({ instructions, 
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>CONTROLS</Text>
-          <View style={styles.controlsGrid}>
+          <View style={[
+            styles.controlsGrid,
+            { flexDirection: isMobile ? 'column' : 'row' }
+          ]}>
             {controls.map((ctrl, i) => (
               <View key={i} style={styles.controlItem}>
                 <View style={styles.keyBadge}>
@@ -92,13 +100,13 @@ export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({ instructions, 
 
 const styles = StyleSheet.create({
   container: {
-    marginHorizontal: Spacing[5],
     marginBottom: Spacing[4],
     backgroundColor: Colors.bg.card,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.bg.glassBorder,
+    borderColor: 'rgba(0, 229, 255, 0.15)', // Updated subtle accent border
     overflow: 'hidden',
+    zIndex: 30, // Added zIndex
     ...elegantShadow(0.2, 10, 4),
   },
   header: {
@@ -140,7 +148,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   controlsGrid: {
-    flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing[3],
   },

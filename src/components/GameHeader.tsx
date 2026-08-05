@@ -5,6 +5,7 @@ import {
   Text,
   View,
   ViewStyle,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, glassmorphism } from '../theme/colors';
@@ -13,8 +14,10 @@ import { Spacing, Radius } from '../theme/spacing';
 
 interface GameHeaderProps {
   title: string;
-  score?: number;
-  highScore?: number;
+  score?: number | string;
+  highScore?: number | string;
+  scoreLabel?: string;
+  highScoreLabel?: string;
   onBack: () => void;
   accentColor?: string;
   rightContent?: React.ReactNode;
@@ -25,42 +28,65 @@ export const GameHeader: React.FC<GameHeaderProps> = ({
   title,
   score,
   highScore,
+  scoreLabel,
+  highScoreLabel,
   onBack,
   accentColor = Colors.accent.primary,
   rightContent,
   style,
 }) => {
+  const { width: windowWidth } = useWindowDimensions();
+  const isMobile = windowWidth < 480;
+  const isTablet = windowWidth < 768;
+
   return (
-    <View style={[styles.container, style]}>
+    <View style={[styles.container, style]} pointerEvents="box-none">
       {/* Back Button */}
       <Pressable
         onPress={onBack}
         style={({ pressed }) => [
           styles.backButton,
-          { opacity: pressed ? 0.6 : 1 },
+          { 
+            width: isMobile ? 40 : 44,
+            height: isMobile ? 40 : 44,
+            opacity: pressed ? 0.6 : 1 
+          },
         ]}
       >
-        <Ionicons name="chevron-back" size={24} color={Colors.text.primary} />
+        <Ionicons name="chevron-back" size={isMobile ? 20 : 24} color={Colors.text.primary} />
       </Pressable>
 
       {/* Center Content: Title & Stats */}
-      <View style={styles.centerContainer}>
-        <Text style={[
-          styles.title, 
-          { 
-            textShadowColor: accentColor, 
-            textShadowOffset: { width: 0, height: 0 }, 
-            textShadowRadius: 15 
-          }
-        ]}>
-          {title}
-        </Text>
+      <View style={styles.centerContainer} pointerEvents="box-none">
+        {!isMobile && (
+          <Text style={[
+            styles.title, 
+            { 
+              fontSize: isMobile ? FontSize.md : FontSize.xl,
+              textShadowColor: accentColor, 
+              textShadowOffset: { width: 0, height: 0 }, 
+              textShadowRadius: 15 
+            }
+          ]}>
+            {title}
+          </Text>
+        )}
         
         {(score !== undefined || highScore !== undefined) && (
-          <View style={styles.statsContainer}>
+          <View style={styles.statsContainer} pointerEvents="box-none">
             {score !== undefined && (
-              <View style={[styles.statBadge, glassmorphism()]}>
-                <Text style={styles.statLabel}>SCORE</Text>
+              <View style={[
+                styles.statBadge, 
+                glassmorphism(), 
+                { 
+                  borderColor: accentColor, 
+                  borderWidth: 1,
+                  paddingHorizontal: isMobile ? Spacing[2] : Spacing[3],
+                  paddingVertical: isMobile ? 1 : Spacing[1],
+                  gap: isMobile ? Spacing[1] : Spacing[2],
+                }
+              ]}>
+                <Text style={styles.statLabel}>{scoreLabel || 'SCORE'}</Text>
                 <Text style={[styles.statValue, { color: accentColor }]}>
                   {score}
                 </Text>
@@ -68,8 +94,18 @@ export const GameHeader: React.FC<GameHeaderProps> = ({
             )}
             
             {highScore !== undefined && (
-              <View style={[styles.statBadge, glassmorphism()]}>
-                <Text style={styles.statLabel}>BEST</Text>
+              <View style={[
+                styles.statBadge, 
+                glassmorphism(), 
+                { 
+                  borderColor: Colors.text.secondary, 
+                  borderWidth: 1,
+                  paddingHorizontal: isMobile ? Spacing[2] : Spacing[3],
+                  paddingVertical: isMobile ? 1 : Spacing[1],
+                  gap: isMobile ? Spacing[1] : Spacing[2],
+                }
+              ]}>
+                <Text style={styles.statLabel}>{highScoreLabel || 'BEST'}</Text>
                 <Text style={[styles.statValue, { color: Colors.text.secondary }]}>
                   {highScore}
                 </Text>
@@ -80,8 +116,8 @@ export const GameHeader: React.FC<GameHeaderProps> = ({
       </View>
 
       {/* Right Content (e.g., Restart Button, Settings) */}
-      <View style={styles.rightContainer}>
-        {rightContent || <View style={{ width: 44 }} />}
+      <View style={styles.rightContainer} pointerEvents="box-none">
+        {rightContent || <View style={{ width: isMobile ? 40 : 44 }} />}
       </View>
     </View>
   );
@@ -98,8 +134,6 @@ const styles = StyleSheet.create({
     zIndex: 100,
   },
   backButton: {
-    width: 44,
-    height: 44,
     borderRadius: Radius.full,
     alignItems: 'center',
     justifyContent: 'center',
@@ -113,7 +147,6 @@ const styles = StyleSheet.create({
   },
   title: {
     fontFamily: Fonts.heading,
-    fontSize: FontSize.xl,
     color: Colors.white,
     letterSpacing: 2,
     marginBottom: Spacing[2],
@@ -125,10 +158,7 @@ const styles = StyleSheet.create({
   statBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: Spacing[3],
-    paddingVertical: Spacing[1],
     borderRadius: Radius.full,
-    gap: Spacing[2],
   },
   statLabel: {
     fontFamily: Fonts.bodySemiBold,
@@ -140,7 +170,6 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
   },
   rightContainer: {
-    minWidth: 44,
     alignItems: 'flex-end',
   },
 });
