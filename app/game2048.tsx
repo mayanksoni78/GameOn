@@ -112,188 +112,69 @@ const AnimatedTile = memo(({ tile }: { tile: TileData }) => {
 });
 AnimatedTile.displayName = 'AnimatedTile';
 
+import { useEngine, Game2048Engine, Direction2048 } from '../src/engines';
+
 export default function Game2048() {
-  const [board, setBoard] = useState<Board>([]);
-  const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(0);
-  
-  const [gameOver, setGameOver] = useState(false);
+  const [gameState, engine] = useEngine(() => new Game2048Engine());
+  const { board, score, highScore, gameOver } = gameState;
+
   const [gameStarted, setGameStarted] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
 
-  const gameOverRef = useRef(gameOver);
-  const gameStartedRef = useRef(gameStarted);
-  const isPausedRef = useRef(isPaused);
-  const boardRef = useRef(board);
-  const scoreRef = useRef(score);
+  useEffect(() => {
+    AsyncStorage.getItem('2048_hs').then((v) => {
+      if (v) engine.setHighScore(parseInt(v, 10));
+    });
+  }, [engine]);
 
   useEffect(() => {
-      gameOverRef.current = gameOver;
-      gameStartedRef.current = gameStarted;
-      isPausedRef.current = isPaused;
-      boardRef.current = board;
-      scoreRef.current = score;
-  }, [gameOver, gameStarted, isPaused, board, score]);
-
-  useEffect(() => {
-    AsyncStorage.getItem('2048_hs').then(v => v && setHighScore(parseInt(v)));
-    initGame();
-  }, []);
+    if (score > highScore) {
+      AsyncStorage.setItem('2048_hs', score.toString());
+    }
+  }, [score, highScore]);
 
   const initGame = () => {
-    let newBoard: Board = Array(4).fill(null).map(() => Array(4).fill(null));
-    newBoard = addRandomTile(newBoard);
-    newBoard = addRandomTile(newBoard);
-    setBoard(newBoard);
-    setScore(0);
-    setGameOver(false);
+    engine.reset();
     setGameStarted(false);
     setIsPaused(false);
   };
 
   const startGame = () => {
-      if (gameOver) initGame();
-      setGameStarted(true);
-      setIsPaused(false);
+    if (gameOver) engine.reset();
+    setGameStarted(true);
+    setIsPaused(false);
   };
 
-  const addRandomTile = (currentBoard: Board): Board => {
-    const emptyCells = [];
-    for (let r = 0; r < 4; r++) {
-      for (let c = 0; c < 4; c++) {
-        if (!currentBoard[r][c]) emptyCells.push({ r, c });
-      }
-    }
-    if (emptyCells.length === 0) return currentBoard;
-
-    const { r, c } = emptyCells[Math.floor(Math.random() * emptyCells.length)];
-    const newBoard = currentBoard.map(row => [...row]);
-    newBoard[r][c] = { 
-        id: generateId(),
-        val: Math.random() < 0.9 ? 2 : 4, 
-        r, c, 
-        isNew: true, 
-        isMerged: false 
-    };
-    return newBoard;
-  };
-
-  const checkGameOver = (currentBoard: Board) => {
-    for (let r = 0; r < 4; r++) {
-      for (let c = 0; c < 4; c++) {
-        if (!currentBoard[r][c]) return false;
-        if (c < 3 && currentBoard[r][c + 1] && currentBoard[r][c]!.val === currentBoard[r][c + 1]!.val) return false;
-        if (r < 3 && currentBoard[r + 1][c] && currentBoard[r][c]!.val === currentBoard[r + 1][c]!.val) return false;
-      }
-    }
-    return true;
-  };
-
-  const move = useCallback((direction: Direction) => {
-    if (gameOverRef.current || isPausedRef.current || !gameStartedRef.current) return;
-    
-    let currentBoard = boardRef.current;
-    if (currentBoard.length === 0) return;
-
-    // Reset animation flags and correct coordinates
-    let newBoard: Board = currentBoard.map((row, r) => row.map((cell, c) => 
-        cell ? { ...cell, isNew: false, isMerged: false, r, c } : null
-    ));
-    
-    let moved = false;
-    let pointsAdded = 0;
-
-    const shiftAndMerge = (line: (TileData | null)[]) => {
-      let filtered = line.filter(t => t !== null) as TileData[];
-      let result: (TileData | null)[] = [];
-      let i = 0;
-      while (i < filtered.length) {
-        if (i + 1 < filtered.length && filtered[i].val === filtered[i + 1].val) {
-          result.push({
-            id: filtered[i].id, // Keep first tile's ID for smooth sliding
-            val: filtered[i].val * 2,
-            isNew: false,
-            isMerged: true,
-            r: 0, c: 0 // Will be set later
-          });
-          pointsAdded += filtered[i].val * 2;
-          i += 2;
-        } else {
-          result.push({ ...filtered[i], isNew: false, isMerged: false });
-          i++;
-        }
-      }
-      while (result.length < 4) result.push(null);
-      return result;
-    };
-
-    if (direction === 'LEFT' || direction === 'RIGHT') {
-      for (let r = 0; r < 4; r++) {
-        let row = newBoard[r];
-        if (direction === 'RIGHT') row.reverse();
-        const newRow = shiftAndMerge(row);
-        if (direction === 'RIGHT') newRow.reverse();
-        
-        // Update r, c coordinates for render mapping
-        for(let c = 0; c < 4; c++) {
-            if (newRow[c]) {
-                newRow[c]!.r = r;
-                newRow[c]!.c = c;
-            }
-            if (newRow[c]?.id !== newBoard[r][c]?.id) moved = true;
-        }
-        newBoard[r] = newRow;
-      }
-    } else {
-      for (let c = 0; c < 4; c++) {
-        let col = [newBoard[0][c], newBoard[1][c], newBoard[2][c], newBoard[3][c]];
-        if (direction === 'DOWN') col.reverse();
-        const newCol = shiftAndMerge(col);
-        if (direction === 'DOWN') newCol.reverse();
-        
-        for (let r = 0; r < 4; r++) {
-            if (newCol[r]) {
-                newCol[r]!.r = r;
-                newCol[r]!.c = c;
-            }
-            if (newCol[r]?.id !== newBoard[r][c]?.id) moved = true;
-            newBoard[r][c] = newCol[r];
-        }
-      }
-    }
-
+  const move = useCallback((direction: Direction2048) => {
+    if (engine.isGameOver() || isPaused || !gameStarted) return;
+    const moved = engine.move(direction);
     if (moved) {
       tapLight();
-      newBoard = addRandomTile(newBoard);
-      setBoard(newBoard);
-      
-      const newScore = scoreRef.current + pointsAdded;
-      setScore(newScore);
-
-      if (checkGameOver(newBoard)) {
-        setGameOver(true);
+      if (engine.isGameOver()) {
         notifyError();
-        AsyncStorage.getItem('2048_hs').then(hsStr => {
-            const hs = hsStr ? parseInt(hsStr) : 0;
-            if (newScore > hs) {
-                setHighScore(newScore);
-                AsyncStorage.setItem('2048_hs', newScore.toString());
-            }
-        });
-      } else if (pointsAdded >= 128) {
-        notifySuccess();
       }
     }
-  }, []);
+  }, [engine, isPaused, gameStarted]);
+
 
   // Extract flat list of tiles for Reanimated rendering
   const tiles: TileData[] = [];
-  if (board.length > 0) {
-      for (let r = 0; r < 4; r++) {
-          for (let c = 0; c < 4; c++) {
-              if (board[r][c]) tiles.push(board[r][c]!);
-          }
+  if (board && board.length > 0) {
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 4; c++) {
+        const val = board[r][c];
+        if (val > 0) {
+          tiles.push({
+            id: `tile-${r}-${c}-${val}`,
+            val,
+            r,
+            c,
+            isNew: false,
+            isMerged: false,
+          });
+        }
       }
+    }
   }
 
   // Gestures

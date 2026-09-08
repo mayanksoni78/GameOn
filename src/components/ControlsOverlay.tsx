@@ -1,102 +1,145 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, Text, Pressable, useWindowDimensions } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
+import React from 'react';
+import {
+  StyleSheet,
+  View,
+  Text,
+  Pressable,
+  Animated,
   Easing,
-  interpolate,
-} from 'react-native-reanimated';
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, glassmorphism, elegantShadow } from '../theme/colors';
+import { BaseComponent, BaseComponentState } from './BaseComponent';
+import { Colors, elegantShadow } from '../theme/colors';
 import { Fonts, FontSize } from '../theme/typography';
 import { Spacing, Radius } from '../theme/spacing';
 
-interface ControlsOverlayProps {
+export interface ControlsOverlayProps {
   instructions: string[];
   controls: { action: string; input: string }[];
 }
 
-export const ControlsOverlay: React.FC<ControlsOverlayProps> = ({ instructions, controls }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const animation = useSharedValue(0); // 0 = closed, 1 = open
-  const { width } = useWindowDimensions();
-  const isMobile = width < 480;
+export interface ControlsOverlayState extends BaseComponentState {
+  isOpen: boolean;
+}
 
-  const toggle = () => {
-    setIsOpen(!isOpen);
-    animation.value = withTiming(isOpen ? 0 : 1, {
-      duration: 300,
-      easing: Easing.out(Easing.exp),
+/**
+ * ControlsOverlay Component
+ * Implements OOP BaseComponent with encapsulated expand/collapse state,
+ * animated drawer interpolation, and responsive control badges.
+ */
+export class ControlsOverlay extends BaseComponent<ControlsOverlayProps, ControlsOverlayState> {
+  private animationValue: Animated.Value;
+
+  constructor(props: ControlsOverlayProps) {
+    super(props);
+    this.animationValue = new Animated.Value(0);
+    this.state = {
+      ...this.state,
+      isOpen: false,
+    };
+  }
+
+  private toggle = (): void => {
+    const nextIsOpen = !this.state.isOpen;
+    this.safeSetState({ isOpen: nextIsOpen }, () => {
+      Animated.timing(this.animationValue, {
+        toValue: nextIsOpen ? 1 : 0,
+        duration: 300,
+        easing: Easing.out(Easing.exp),
+        useNativeDriver: false,
+      }).start();
     });
   };
 
-  const containerStyle = useAnimatedStyle(() => {
-    const height = interpolate(animation.value, [0, 1], [0, 300]); // Increased Max height estimation
-    const opacity = interpolate(animation.value, [0, 0.2, 1], [0, 0, 1]);
-    return {
-      maxHeight: height,
-      opacity,
-      marginTop: animation.value > 0 ? Spacing[4] : 0,
-    };
-  });
+  public renderContent(): React.ReactNode {
+    const { instructions, controls } = this.props;
+    const isMobile = this.isMobile();
 
-  const iconStyle = useAnimatedStyle(() => {
-    const rotate = interpolate(animation.value, [0, 1], [0, 180]);
-    return {
-      transform: [{ rotate: `${rotate}deg` }],
-    };
-  });
+    const maxHeight = this.animationValue.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, 320],
+    });
 
-  return (
-    <View style={[
-      styles.container,
-      { marginHorizontal: isMobile ? Spacing[3] : Spacing[5] }
-    ]}>
-      <Pressable
-        onPress={toggle}
-        style={({ pressed }) => [
-          styles.header,
-          { opacity: pressed ? 0.7 : 1 }
+    const opacity = this.animationValue.interpolate({
+      inputRange: [0, 0.2, 1],
+      outputRange: [0, 0, 1],
+    });
+
+    const marginTop = this.animationValue.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, Spacing[4]],
+    });
+
+    const rotate = this.animationValue.interpolate({
+      inputRange: [0, 1],
+      outputRange: ['0deg', '180deg'],
+    });
+
+    return (
+      <View
+        style={[
+          styles.container,
+          { marginHorizontal: isMobile ? Spacing[3] : Spacing[5] },
         ]}
       >
-        <View style={styles.headerLeft}>
-          <Ionicons name="game-controller-outline" size={18} color={Colors.text.primary} />
-          <Text style={styles.headerText}>How to Play & Controls</Text>
-        </View>
-        <Animated.View style={iconStyle}>
-          <Ionicons name="chevron-down" size={18} color={Colors.text.muted} />
-        </Animated.View>
-      </Pressable>
+        <Pressable
+          onPress={this.toggle}
+          style={({ pressed }) => [
+            styles.header,
+            { opacity: pressed ? 0.7 : 1 },
+          ]}
+        >
+          <View style={styles.headerLeft}>
+            <Ionicons name="game-controller-outline" size={18} color={Colors.text.primary} />
+            <Text style={styles.headerText}>How to Play & Controls</Text>
+          </View>
+          <Animated.View style={{ transform: [{ rotate }] }}>
+            <Ionicons name="chevron-down" size={18} color={Colors.text.muted} />
+          </Animated.View>
+        </Pressable>
 
-      <Animated.View style={[styles.content, containerStyle]}>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>OBJECTIVE</Text>
-          {instructions.map((inst, i) => (
-            <Text key={i} style={styles.instructionText}>• {inst}</Text>
-          ))}
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>CONTROLS</Text>
-          <View style={[
-            styles.controlsGrid,
-            { flexDirection: isMobile ? 'column' : 'row' }
-          ]}>
-            {controls.map((ctrl, i) => (
-              <View key={i} style={styles.controlItem}>
-                <View style={styles.keyBadge}>
-                  <Text style={styles.keyText}>{ctrl.input}</Text>
-                </View>
-                <Text style={styles.actionText}>{ctrl.action}</Text>
-              </View>
+        <Animated.View
+          style={[
+            styles.content,
+            {
+              maxHeight,
+              opacity,
+              marginTop,
+            },
+          ]}
+        >
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>OBJECTIVE</Text>
+            {instructions.map((inst, i) => (
+              <Text key={i} style={styles.instructionText}>
+                • {inst}
+              </Text>
             ))}
           </View>
-        </View>
-      </Animated.View>
-    </View>
-  );
-};
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>CONTROLS</Text>
+            <View
+              style={[
+                styles.controlsGrid,
+                { flexDirection: isMobile ? 'column' : 'row' },
+              ]}
+            >
+              {controls.map((ctrl, i) => (
+                <View key={i} style={styles.controlItem}>
+                  <View style={styles.keyBadge}>
+                    <Text style={styles.keyText}>{ctrl.input}</Text>
+                  </View>
+                  <Text style={styles.actionText}>{ctrl.action}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        </Animated.View>
+      </View>
+    );
+  }
+}
 
 const styles = StyleSheet.create({
   container: {
@@ -104,9 +147,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.bg.card,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: 'rgba(0, 229, 255, 0.15)', // Updated subtle accent border
+    borderColor: 'rgba(0, 229, 255, 0.15)',
     overflow: 'hidden',
-    zIndex: 30, // Added zIndex
+    zIndex: 30,
     ...elegantShadow(0.2, 10, 4),
   },
   header: {

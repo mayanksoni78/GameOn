@@ -31,7 +31,7 @@ const TRAY_CELL = Math.floor(CELL * 0.5);
 const DRAG_OFFSET_Y = 80;
 
 // ── Shape definitions ─────────────────────────────────────────────────────────
-const SHAPE_DEFS = [
+const SHAPE_DEFS: { cells: [number, number][]; color: string }[] = [
   { cells: [[0,0]],                                       color: '#A855F7' }, // Dot
   { cells: [[0,0],[0,1]],                                 color: '#3B82F6' }, // H2
   { cells: [[0,0],[1,0]],                                 color: '#3B82F6' }, // V2
@@ -46,7 +46,7 @@ const SHAPE_DEFS = [
 
 type CellColor = string | null;
 type Board = CellColor[][];
-type Piece = { cells: number[][]; color: string; id: string };
+type Piece = { cells: [number, number][]; color: string; id: string };
 
 // ── Pure helpers ──────────────────────────────────────────────────────────────
 const emptyBoard = (): Board =>
@@ -271,28 +271,24 @@ const DraggablePiece = React.memo(({
   );
 });
 
+import { useEngine, BlockodukoEngine } from '../src/engines';
+
 // ══════════════════════════════════════════════════════════════════════════════
 // ── Main Game ────────────────────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
 export default function Blockoduko() {
-  const [board, setBoard] = useState<Board>(emptyBoard);
-  const [pieces, setPieces] = useState<Piece[]>(genThree);
-  const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(0);
-  const [gameOver, setGameOver] = useState(false);
-  
+  const [gameState, engine] = useEngine(() => new BlockodukoEngine());
+  const { grid: board, dockPieces, score, highScore, gameOver } = gameState;
+
   const [hover, setHover] = useState<{
     cells: number[][]; r: number; c: number; valid: boolean; color: string;
   } | null>(null);
 
-  // Refs for stable closures during dragged state
-  const boardRef = useRef<Board>(board);
-  const piecesRef = useRef<Piece[]>(pieces);
+  const boardRef = useRef<Board>(board as any);
   const scoreRef = useRef(score);
   const highScoreRef = useRef(highScore);
 
-  useEffect(() => { boardRef.current = board; }, [board]);
-  useEffect(() => { piecesRef.current = pieces; }, [pieces]);
+  useEffect(() => { boardRef.current = board as any; }, [board]);
   useEffect(() => { scoreRef.current = score; }, [score]);
   useEffect(() => { highScoreRef.current = highScore; }, [highScore]);
 
@@ -300,7 +296,14 @@ export default function Blockoduko() {
   const boardLayoutRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
-    AsyncStorage.getItem('blockoduko_hs').then(v => v && setHighScore(parseInt(v)));
+    AsyncStorage.getItem('blockoduko_hs').then(v => {
+      if (v) {
+        const hs = parseInt(v, 10);
+        if (hs > engine.getHighScore()) {
+          engine.setHighScore(hs);
+        }
+      }
+    });
   }, []);
 
   const handleHover = useCallback((cells: number[][], r: number, c: number, valid: boolean, color: string) => {
@@ -312,48 +315,24 @@ export default function Blockoduko() {
   const handleHoverEnd = useCallback(() => setHover(null), []);
 
   const handlePlace = useCallback((pieceIdx: number, r: number, c: number) => {
-    const currentBoard = boardRef.current;
-    const currentPieces = piecesRef.current;
-    const piece = currentPieces[pieceIdx];
-    if (!piece || !canPlace(piece.cells, r, c, currentBoard)) return;
-
-    tapMedium();
-
-    const newBoard: Board = currentBoard.map(row => [...row]);
-    const placed = doPlace(piece.cells, r, c, piece.color, newBoard);
-    const cleared = clearCompleted(newBoard);
-
-    const gained = placed * 10 + cleared * 10;
-    const newScore = scoreRef.current + gained;
-
-    if (cleared > 0) notifySuccess();
-
-    const remaining = currentPieces.filter((_, i) => i !== pieceIdx);
-    const nextPieces = remaining.length === 0 ? genThree() : remaining;
-    const isOver = !anyCanPlace(nextPieces, newBoard);
-
-    setBoard(newBoard);
-    setScore(newScore);
-    setPieces(nextPieces);
-
-    if (isOver) {
-      setGameOver(true);
-      notifyError();
-      const hs = highScoreRef.current;
-      if (newScore > hs) {
-        setHighScore(newScore);
-        AsyncStorage.setItem('blockoduko_hs', newScore.toString());
+    const success = engine.placePiece(pieceIdx, r, c);
+    if (success) {
+      tapMedium();
+      const s = engine.getScore();
+      if (s > engine.getHighScore()) {
+        AsyncStorage.setItem('blockoduko_hs', s.toString());
+      }
+      if (engine.getState().gameOver) {
+        notifyError();
       }
     }
-  }, []);
+  }, [engine]);
 
   const restart = useCallback(() => {
-    setBoard(emptyBoard());
-    setPieces(genThree());
-    setScore(0);
-    setGameOver(false);
+    tapMedium();
+    engine.reset();
     setHover(null);
-  }, []);
+  }, [engine]);
 
   const boardViewRef = useRef<View | null>(null);
   
@@ -463,18 +442,21 @@ export default function Blockoduko() {
 
           {/* ── Tray ── */}
           <View style={styles.trayContainer}>
-            {pieces.map((piece, index) => (
-              <DraggablePiece
-                key={piece.id}
-                piece={piece}
-                index={index}
-                boardLayoutRef={boardLayoutRef}
-                boardStateRef={boardRef}
-                onPlace={handlePlace}
-                onHover={handleHover}
-                onHoverEnd={handleHoverEnd}
-              />
-            ))}
+            {dockPieces.map((piece, index) => {
+              if (!piece) return null;
+              return (
+                <DraggablePiece
+                  key={piece.id}
+                  piece={piece as Piece}
+                  index={index}
+                  boardLayoutRef={boardLayoutRef}
+                  boardStateRef={boardRef}
+                  onPlace={handlePlace}
+                  onHover={handleHover}
+                  onHoverEnd={handleHoverEnd}
+                />
+              );
+            })}
           </View>
 
           {/* ── Restart ── */}

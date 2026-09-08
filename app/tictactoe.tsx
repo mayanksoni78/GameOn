@@ -33,69 +33,13 @@ const CELL_GAP     = 2;                                         // gap between c
 const CELL_SIZE    = Math.floor((BOARD_INNER - CELL_GAP * 2) / 3); // exact fit
 const GRID_SIZE    = CELL_SIZE * 3 + CELL_GAP * 2;             // actual grid px
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-type Player     = 'X' | 'O' | null;
-type GameMode   = 'PvP' | 'PvE';
-type Difficulty = 'EASY' | 'MEDIUM' | 'HARD';
-
-// ─── Win check ────────────────────────────────────────────────────────────────
-const WIN_LINES = [
-  [0,1,2],[3,4,5],[6,7,8],
-  [0,3,6],[1,4,7],[2,5,8],
-  [0,4,8],[2,4,6],
-];
-
-function getWinnerInfo(sq: Player[]): { winner: Player; line: number[] } | null {
-  for (const line of WIN_LINES) {
-    const [a, b, c] = line;
-    if (sq[a] && sq[a] === sq[b] && sq[a] === sq[c]) return { winner: sq[a], line };
-  }
-  return null;
-}
-
-function isDraw(sq: Player[]): boolean {
-  return !sq.includes(null) && !getWinnerInfo(sq);
-}
-
-// ─── AI ───────────────────────────────────────────────────────────────────────
-function minimax(b: Player[], depth: number, max: boolean): number {
-  const w = getWinnerInfo(b);
-  if (w?.winner === 'O') return 10 - depth;
-  if (w?.winner === 'X') return depth - 10;
-  if (isDraw(b)) return 0;
-  if (max) {
-    let best = -Infinity;
-    for (let i = 0; i < 9; i++) { if (!b[i]) { b[i] = 'O'; best = Math.max(best, minimax(b, depth+1, false)); b[i] = null; } }
-    return best;
-  }
-  let best = Infinity;
-  for (let i = 0; i < 9; i++) { if (!b[i]) { b[i] = 'X'; best = Math.min(best, minimax(b, depth+1, true)); b[i] = null; } }
-  return best;
-}
-
-function getBestMove(b: Player[]): number {
-  let best = -Infinity, m = -1;
-  for (let i = 0; i < 9; i++) { if (!b[i]) { b[i] = 'O'; const s = minimax(b, 0, false); b[i] = null; if (s > best) { best = s; m = i; } } }
-  return m;
-}
-
-function getRandomMove(b: Player[]): number {
-  const e: number[] = []; b.forEach((v, i) => { if (!v) e.push(i); });
-  return e.length ? e[Math.floor(Math.random() * e.length)] : -1;
-}
-
-function getMediumMove(b: Player[]): number {
-  for (let i = 0; i < 9; i++) { if (!b[i]) { b[i] = 'O'; if (getWinnerInfo(b)) { b[i] = null; return i; } b[i] = null; } }
-  for (let i = 0; i < 9; i++) { if (!b[i]) { b[i] = 'X'; if (getWinnerInfo(b)) { b[i] = null; return i; } b[i] = null; } }
-  if (!b[4]) return 4;
-  return getRandomMove(b);
-}
+import { useEngine, TicTacToeEngine, PlayerSymbol, GameMode, Difficulty } from '../src/engines';
 
 // ─── AnimatedCell ─────────────────────────────────────────────────────────────
 const AnimatedCell = ({
   value, onPress, disabled, isWinCell,
 }: {
-  value: Player; onPress: () => void; disabled: boolean; isWinCell: boolean;
+  value: PlayerSymbol; onPress: () => void; disabled: boolean; isWinCell: boolean;
 }) => {
   const scale   = useSharedValue(0);
   const opacity = useSharedValue(0);
@@ -201,148 +145,60 @@ function SegmentedControl<T extends string>({
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// ─── Main Component (OOP Engine Integration) ──────────────────────────────────
 export default function TicTacToe() {
-  const [mode,       setMode]       = useState<GameMode>('PvP');
-  const [difficulty, setDifficulty] = useState<Difficulty>('MEDIUM');
+  const [gameState, engine] = useEngine(() => new TicTacToeEngine());
 
-  const [board,    setBoard]    = useState<Player[]>(Array(9).fill(null));
-  const [isXNext,  setIsXNext]  = useState(true);
-  const [winInfo,  setWinInfo]  = useState<{ winner: Player; line: number[] } | null>(null);
-  const [draw,     setDraw]     = useState(false);
-  const [gameOver, setGameOver] = useState(false);
-  const [scoreX,   setScoreX]   = useState(0);
-  const [scoreO,   setScoreO]   = useState(0);
-  const [aiThink,  setAiThink]  = useState(false);
+  const {
+    board,
+    currentPlayer,
+    winnerInfo,
+    isDraw,
+    gameMode,
+    difficulty,
+    xScore,
+    oScore,
+  } = gameState;
 
-  // Track result text for modal (avoids stale reads)
-  const [resultTitle,  setResultTitle]  = useState('');
-  const [resultAccent, setResultAccent] = useState<string>(ACCENT);
+  const gameOver = engine.isGameOver();
 
-  // boardRef for async AI timeout reads
-  const boardRef = useRef<Player[]>(board);
-  useEffect(() => { boardRef.current = board; }, [board]);
-
-  // ── Reset ─────────────────────────────────────────────────────────────────
-  const resetBoard = useCallback(() => {
+  // Reset Board handler
+  const resetBoard = () => {
     tapMedium();
-    const empty: Player[] = Array(9).fill(null);
-    boardRef.current = empty;
-    setBoard(empty);
-    setIsXNext(true);
-    setWinInfo(null);
-    setDraw(false);
-    setGameOver(false);
-    setAiThink(false);
-    setResultTitle('');
-  }, []);
-
-  const fullReset = useCallback(() => {
-    resetBoard();
-    setScoreX(0);
-    setScoreO(0);
-  }, [resetBoard]);
-
-  // Reset on mode/difficulty change
-  useEffect(() => {
-    const empty: Player[] = Array(9).fill(null);
-    boardRef.current = empty;
-    setBoard(empty);
-    setIsXNext(true);
-    setWinInfo(null);
-    setDraw(false);
-    setGameOver(false);
-    setAiThink(false);
-    setResultTitle('');
-  }, [mode, difficulty]);
-
-  // ── Resolve board (pure function, no stale closures) ──────────────────────
-  const resolveBoard = (newBoard: Player[], currentMode: GameMode): boolean => {
-    const wi = getWinnerInfo(newBoard);
-    if (wi) {
-      setWinInfo(wi);
-      setGameOver(true);
-      const isXWin = wi.winner === 'X';
-      if (isXWin) {
-        setScoreX(s => s + 1);
-        setResultTitle(currentMode === 'PvE' ? 'YOU WIN!' : 'X WINS!');
-        setResultAccent(X_COLOR);
-        notifySuccess();
-      } else {
-        setScoreO(s => s + 1);
-        setResultTitle(currentMode === 'PvE' ? 'CPU WINS!' : 'O WINS!');
-        setResultAccent(O_COLOR);
-        if (currentMode === 'PvE') notifyError(); else notifySuccess();
-      }
-      return true;
-    }
-    if (isDraw(newBoard)) {
-      setDraw(true);
-      setGameOver(true);
-      setResultTitle("IT'S A DRAW!");
-      setResultAccent(Colors.text.muted);
-      notifyError();
-      return true;
-    }
-    return false;
+    engine.reset();
   };
 
-  // ── Human tap (reads fresh state — no useCallback) ────────────────────────
+  const fullReset = () => {
+    engine.resetAll();
+  };
+
   const handlePress = (index: number) => {
-    if (gameOver || aiThink) return;
-    if (board[index]) return;
-    if (mode === 'PvE' && !isXNext) return;
-
     tapLight();
-    const newBoard = [...board];
-    newBoard[index] = isXNext ? 'X' : 'O';
-    boardRef.current = newBoard;
-    setBoard(newBoard);
-
-    if (!resolveBoard(newBoard, mode)) {
-      setIsXNext(prev => !prev);
+    const moved = engine.makeMove(index);
+    if (moved) {
+      if (engine.getState().winnerInfo) {
+        notifySuccess();
+      } else if (engine.getState().isDraw) {
+        notifyError();
+      }
     }
   };
-
-  // ── AI turn ───────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (mode !== 'PvE' || isXNext || gameOver) return;
-
-    setAiThink(true);
-    const delay = difficulty === 'EASY' ? 400 : difficulty === 'MEDIUM' ? 550 : 700;
-
-    const timer = setTimeout(() => {
-      const current = [...boardRef.current];
-      let move = -1;
-      if (difficulty === 'EASY')        move = getRandomMove(current);
-      else if (difficulty === 'MEDIUM') move = getMediumMove(current);
-      else                              move = getBestMove(current);
-
-      if (move === -1) { setAiThink(false); return; }
-
-      const newBoard = [...boardRef.current];
-      newBoard[move] = 'O';
-      boardRef.current = newBoard;
-      setAiThink(false);
-      setBoard(newBoard);
-
-      if (!resolveBoard(newBoard, 'PvE')) {
-        setIsXNext(true);
-      }
-    }, delay);
-
-    return () => clearTimeout(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isXNext, mode, gameOver, difficulty]);
 
   // ── Derived UI ────────────────────────────────────────────────────────────
-  const winLine   = winInfo?.line ?? [];
-  const turnColor = winInfo ? WIN_COLOR : draw ? Colors.text.muted : (isXNext ? X_COLOR : O_COLOR);
+  const winLine = winnerInfo?.line ?? [];
+  const turnColor = winnerInfo ? WIN_COLOR : isDraw ? Colors.text.muted : (currentPlayer === 'X' ? X_COLOR : O_COLOR);
+  const resultTitle = winnerInfo
+    ? gameMode === 'PvE'
+      ? winnerInfo.winner === 'X' ? 'YOU WIN!' : 'CPU WINS!'
+      : `${winnerInfo.winner} WINS!`
+    : isDraw
+      ? "IT'S A DRAW!"
+      : '';
+
   const turnLabel = gameOver
     ? resultTitle
-    : aiThink
-      ? "AI THINKING..."
-      : `${isXNext ? 'X' : 'O'}'S TURN`;
+    : `${currentPlayer}'S TURN`;
+
 
   return (
     <View style={styles.root}>
@@ -351,10 +207,10 @@ export default function TicTacToe() {
 
         <GameHeader
           title="TIC TAC TOE"
-          score={scoreX}
-          scoreLabel={mode === 'PvE' ? 'YOU (X)' : 'PLAYER X'}
-          highScore={scoreO}
-          highScoreLabel={mode === 'PvE' ? `CPU (${difficulty[0]}${difficulty.slice(1).toLowerCase()})` : 'PLAYER O'}
+          score={xScore}
+          scoreLabel={gameMode === 'PvE' ? 'YOU (X)' : 'PLAYER X'}
+          highScore={oScore}
+          highScoreLabel={gameMode === 'PvE' ? `CPU (${difficulty[0]}${difficulty.slice(1).toLowerCase()})` : 'PLAYER O'}
           accentColor={ACCENT}
           onBack={() => router.replace('/')}
           rightContent={
@@ -382,31 +238,28 @@ export default function TicTacToe() {
               <SegmentedControl
                 options={['PvP', 'PvE'] as GameMode[]}
                 labels={['👤 1v1', '🤖 1v CPU']}
-                value={mode}
-                onChange={m => setMode(m)}
+                value={gameMode}
+                onChange={m => engine.setGameMode(m)}
                 activeColor={ACCENT}
               />
             </View>
             
-            {mode === 'PvE' && (
+            {gameMode === 'PvE' && (
               <View style={[styles.settingGroup, { marginTop: Spacing[4] }]}>
                 <Text style={styles.settingLabel}>CPU DIFFICULTY</Text>
                 <SegmentedControl
                   options={['EASY', 'MEDIUM', 'HARD'] as Difficulty[]}
                   labels={['EASY', 'MEDIUM', 'HARD']}
                   value={difficulty}
-                  onChange={d => setDifficulty(d)}
+                  onChange={d => engine.setDifficulty(d)}
                   activeColor={ACCENT}
                 />
               </View>
             )}
           </View>
 
-          {/* Scoreboard moved to GameHeader */}
-
           {/* ── Turn / Result indicator ───────────────────────── */}
           <View style={styles.turnRow}>
-            {aiThink && <View style={[styles.aiPulse, { backgroundColor: ACCENT }]} />}
             <Text style={[styles.turnText, { color: turnColor, textShadowColor: turnColor }]}>
               {turnLabel}
             </Text>
@@ -414,7 +267,7 @@ export default function TicTacToe() {
 
           {/* ── Board ─────────────────────────────────────────── */}
           <View style={[styles.board, { width: MAX_BOARD, height: MAX_BOARD }]}>
-            {/* Grid lines — pointerEvents: 'none' so they never block taps */}
+            {/* Grid lines */}
             <View pointerEvents="none" style={StyleSheet.absoluteFill}>
               <View style={[styles.gridLine, { width: CELL_GAP, height: '100%', left: CELL_SIZE }]} />
               <View style={[styles.gridLine, { width: CELL_GAP, height: '100%', left: CELL_SIZE * 2 + CELL_GAP }]} />
@@ -424,12 +277,12 @@ export default function TicTacToe() {
 
             {/* Cells */}
             <View style={styles.grid}>
-              {board.map((cell, index) => (
+              {board.map((cell: any, index: number) => (
                 <AnimatedCell
                   key={index}
                   value={cell}
                   onPress={() => handlePress(index)}
-                  disabled={gameOver || aiThink || (mode === 'PvE' && !isXNext)}
+                  disabled={gameOver || (gameMode === 'PvE' && currentPlayer !== 'X')}
                   isWinCell={winLine.includes(index)}
                 />
               ))}
@@ -451,8 +304,8 @@ export default function TicTacToe() {
         <GameOverModal
           visible={gameOver}
           title={resultTitle || 'GAME OVER'}
-          score={draw ? '—' : '+1'}
-          accentColor={resultAccent}
+          score={isDraw ? '—' : '+1'}
+          accentColor={turnColor}
           onRestart={resetBoard}
           onHome={() => { fullReset(); router.replace('/'); }}
         />

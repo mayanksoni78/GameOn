@@ -74,252 +74,109 @@ const AnimatedPieceCell = memo(({ r, c, cellSize, color, isGhost }: { r: number,
 });
 AnimatedPieceCell.displayName = 'AnimatedPieceCell';
 
+import { useEngine, TetrisEngine } from '../src/engines';
+
 export default function Tetris() {
   const [boardWidth, setBoardWidth] = useState(0);
   const [cellSize, setCellSize] = useState(0);
-  const [grid, setGrid] = useState<string[][]>(Array(ROWS).fill(Array(COLS).fill('')));
-  const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(0);
-  const [gameOver, setGameOver] = useState(false);
-  
-  const [currentPiece, setCurrentPiece] = useState<{
-    shape: number[][];
-    color: string;
-    r: number;
-    c: number;
-    type: TetrominoType;
-  } | null>(null);
 
-  const [nextPieceType, setNextPieceType] = useState<TetrominoType>('T');
-  const [holdPieceType, setHoldPieceType] = useState<TetrominoType | null>(null);
-  const [canHold, setCanHold] = useState(true);
+  const [gameState, engine] = useEngine(() => new TetrisEngine());
+  const {
+    grid,
+    currentPiece,
+    nextPiece,
+    holdPiece: holdPieceData,
+    canHold,
+    score,
+    highScore,
+    gameOver,
+    isPaused,
+    gameStarted,
+    level,
+  } = gameState;
 
-  const [gameStarted, setGameStarted] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  
-  const gameStartedRef = useRef(gameStarted);
-  const isPausedRef = useRef(isPaused);
-
-  const gameLoopRef = useRef<any>(null);
-  const currentPieceRef = useRef(currentPiece);
-  const gridRef = useRef(grid);
-  const gameOverRef = useRef(gameOver);
+  const engineRef = useRef(engine);
+  engineRef.current = engine;
 
   useEffect(() => {
-      currentPieceRef.current = currentPiece;
-      gridRef.current = grid;
-      gameOverRef.current = gameOver;
-      gameStartedRef.current = gameStarted;
-      isPausedRef.current = isPaused;
-  }, [currentPiece, grid, gameOver, gameStarted, isPaused]);
-
-  useEffect(() => {
-    AsyncStorage.getItem('tetris_hs').then(s => s && setHighScore(parseInt(s)));
+    AsyncStorage.getItem('tetris_hs').then(s => {
+      if (s) {
+        const hs = parseInt(s, 10);
+        if (hs > engine.getHighScore()) {
+          engine.setHighScore(hs);
+        }
+      }
+    });
     
-    // Increased bounds for better scaling and larger cells
     const maxW = Math.min(screenWidth - 32, 500); 
     const maxH = screenHeight * 0.72;
     const size = Math.floor(Math.min(maxW / COLS, maxH / ROWS));
     
     setCellSize(size);
     setBoardWidth(size * COLS);
-    spawnPiece();
   }, []);
-
-  const getRandomType = (): TetrominoType => {
-    const keys = Object.keys(TETROMINOS) as TetrominoType[];
-    return keys[Math.floor(Math.random() * keys.length)];
-  };
-
-  const spawnPiece = useCallback((typeToSpawn?: TetrominoType) => {
-    const type = typeToSpawn || nextPieceType;
-    if (!typeToSpawn) setNextPieceType(getRandomType());
-    
-    const tetromino = TETROMINOS[type];
-    const newPiece = {
-      shape: tetromino.shape,
-      color: tetromino.color,
-      r: 0,
-      c: Math.floor(COLS / 2) - Math.floor(tetromino.shape[0].length / 2),
-      type: type,
-    };
-
-    if (isValidMove(newPiece.shape, newPiece.r, newPiece.c, gridRef.current)) {
-      setCurrentPiece(newPiece);
-      setCanHold(true);
-    } else {
-      handleGameOver();
-    }
-  }, [nextPieceType]);
-
-  const holdPiece = useCallback(() => {
-      if (gameOverRef.current || isPausedRef.current || !gameStartedRef.current || !currentPieceRef.current || !canHold) return;
-      tapLight();
-      const currentType = currentPieceRef.current.type;
-      
-      if (holdPieceType) {
-          spawnPiece(holdPieceType);
-      } else {
-          spawnPiece(); // Just spawn next
-      }
-      setHoldPieceType(currentType);
-      setCanHold(false);
-  }, [holdPieceType, canHold, spawnPiece]);
-
-  const isValidMove = (shape: number[][], r: number, c: number, currentGrid: string[][]) => {
-    for (let row = 0; row < shape.length; row++) {
-      for (let col = 0; col < shape[row].length; col++) {
-        if (shape[row][col]) {
-          const newR = r + row;
-          const newC = c + col;
-          if (newC < 0 || newC >= COLS || newR >= ROWS || (newR >= 0 && currentGrid[newR][newC] !== '')) {
-            return false;
-          }
-        }
-      }
-    }
-    return true;
-  };
-
-  const move = useCallback((dr: number, dc: number) => {
-    if (gameOverRef.current || isPausedRef.current || !gameStartedRef.current) return false;
-    const cp = currentPieceRef.current;
-    if (!cp) return false;
-    const newR = cp.r + dr;
-    const newC = cp.c + dc;
-    
-    if (isValidMove(cp.shape, newR, newC, gridRef.current)) {
-      setCurrentPiece({ ...cp, r: newR, c: newC });
-      return true;
-    }
-    return false;
-  }, []);
-
-  const rotate = useCallback(() => {
-    if (gameOverRef.current || isPausedRef.current || !gameStartedRef.current) return;
-    const cp = currentPieceRef.current;
-    if (!cp) return;
-    tapLight();
-    const rotated = cp.shape[0].map((_, i) =>
-      cp.shape.map(row => row[i]).reverse()
-    );
-    if (isValidMove(rotated, cp.r, cp.c, gridRef.current)) {
-      setCurrentPiece({ ...cp, shape: rotated });
-    } else {
-        // Wall kick attempt (simple)
-        if (isValidMove(rotated, cp.r, cp.c - 1, gridRef.current)) {
-            setCurrentPiece({ ...cp, shape: rotated, c: cp.c - 1 });
-        } else if (isValidMove(rotated, cp.r, cp.c + 1, gridRef.current)) {
-            setCurrentPiece({ ...cp, shape: rotated, c: cp.c + 1 });
-        }
-    }
-  }, []);
-
-  const hardDrop = useCallback(() => {
-    if (gameOverRef.current || isPausedRef.current || !gameStartedRef.current) return;
-    const cp = currentPieceRef.current;
-    if (!cp) return;
-    tapMedium();
-    let dropR = cp.r;
-    while (isValidMove(cp.shape, dropR + 1, cp.c, gridRef.current)) {
-      dropR++;
-    }
-    const finalPiece = { ...cp, r: dropR };
-    setCurrentPiece(finalPiece);
-    // Instantly lock
-    lockPiece(finalPiece);
-  }, []);
-
-  const lockPiece = useCallback((pieceToLock = currentPieceRef.current) => {
-    const cp = pieceToLock;
-    if (!cp) return;
-    const newGrid = gridRef.current.map(row => [...row]);
-    let locked = false;
-
-    for (let r = 0; r < cp.shape.length; r++) {
-      for (let c = 0; c < cp.shape[r].length; c++) {
-        if (cp.shape[r][c]) {
-          if (cp.r + r < 0) {
-            handleGameOver();
-            return;
-          }
-          newGrid[cp.r + r][cp.c + c] = cp.color;
-          locked = true;
-        }
-      }
-    }
-
-    if (locked) {
-      let linesCleared = 0;
-      const filteredGrid = newGrid.filter(row => row.some(cell => cell === ''));
-      linesCleared = ROWS - filteredGrid.length;
-
-      const finalGrid = [
-        ...Array(linesCleared).fill(Array(COLS).fill('')),
-        ...filteredGrid
-      ];
-
-      setGrid(finalGrid);
-      if (linesCleared > 0) {
-        setScore(s => s + linesCleared * 100);
-        notifySuccess();
-      }
-      spawnPiece();
-    }
-  }, [spawnPiece]);
 
   useEffect(() => {
-    if (gameOver) {
-      if (gameLoopRef.current) clearInterval(gameLoopRef.current);
-      return;
-    }
+    if (gameOver || isPaused || !gameStarted) return;
 
-    gameLoopRef.current = setInterval(() => {
-      if (gameOverRef.current || isPausedRef.current || !gameStartedRef.current) return;
-      if (!move(1, 0)) {
-        lockPiece();
+    const interval = setInterval(() => {
+      const moved = engineRef.current.tick();
+      if (!moved && engineRef.current.getState().gameOver) {
+        notifyError();
+        const sc = engineRef.current.getScore();
+        if (sc > engineRef.current.getHighScore()) {
+          AsyncStorage.setItem('tetris_hs', sc.toString());
+        }
       }
-    }, Math.max(150, BASE_SPEED - Math.floor(score / 500) * 100));
+    }, Math.max(150, BASE_SPEED - (level - 1) * 70));
 
-    return () => clearInterval(gameLoopRef.current);
-  }, [move, lockPiece, gameOver, score]);
+    return () => clearInterval(interval);
+  }, [gameOver, isPaused, gameStarted, level]);
 
-  const handleGameOver = () => {
-    setGameOver(true);
-    notifyError();
-    if (score > highScore) {
-      setHighScore(score);
-      AsyncStorage.setItem('tetris_hs', score.toString());
-    }
-  };
+  const rotate = useCallback(() => {
+    tapLight();
+    engine.rotate();
+  }, [engine]);
+
+  const moveLeft = useCallback(() => {
+    engine.moveLeft();
+  }, [engine]);
+
+  const moveRight = useCallback(() => {
+    engine.moveRight();
+  }, [engine]);
+
+  const moveDown = useCallback(() => {
+    engine.moveDown();
+  }, [engine]);
+
+  const hardDrop = useCallback(() => {
+    tapMedium();
+    engine.hardDrop();
+  }, [engine]);
+
+  const holdPiece = useCallback(() => {
+    tapLight();
+    engine.hold();
+  }, [engine]);
 
   const restart = () => {
-    setGrid(Array(ROWS).fill(Array(COLS).fill('')));
-    setScore(0);
-    setGameOver(false);
-    setGameStarted(false);
-    setIsPaused(false);
-    setHoldPieceType(null);
-    setNextPieceType(getRandomType());
-    spawnPiece(getRandomType());
+    tapMedium();
+    engine.reset();
   };
 
   useKeyboard((key: KeyboardKey) => {
     if (key === 'Enter') {
-        if (gameOver) restart();
-        else if (!gameStarted) {
-            setGameStarted(true);
-            setIsPaused(false);
-        } else {
-            setIsPaused(prev => !prev);
-        }
-        return;
+      if (gameOver) restart();
+      else if (!gameStarted) engine.startGame();
+      else engine.togglePause();
+      return;
     }
     switch (key) {
       case 'ArrowUp': case 'w': case 'W': rotate(); break;
-      case 'ArrowDown': case 's': case 'S': move(1, 0); break;
-      case 'ArrowLeft': case 'a': case 'A': move(0, -1); break;
-      case 'ArrowRight': case 'd': case 'D': move(0, 1); break;
+      case 'ArrowDown': case 's': case 'S': moveDown(); break;
+      case 'ArrowLeft': case 'a': case 'A': moveLeft(); break;
+      case 'ArrowRight': case 'd': case 'D': moveRight(); break;
       case ' ': hardDrop(); break;
       case 'Shift': holdPiece(); break;
     }
@@ -330,47 +187,35 @@ export default function Tetris() {
     .activeOffsetX([-10, 10])
     .activeOffsetY([-10, 10])
     .onUpdate((e) => {
-        // Discrete movement tracking
-        const threshold = cellSize;
-        if (e.translationX > threshold) {
-            runOnJS(move)(0, 1);
-            e.translationX -= threshold; // Consume
-        } else if (e.translationX < -threshold) {
-            runOnJS(move)(0, -1);
-            e.translationX += threshold; // Consume
-        }
-        if (e.translationY > threshold) {
-            runOnJS(move)(1, 0);
-            e.translationY -= threshold;
-        }
+      const threshold = cellSize;
+      if (e.translationX > threshold) {
+        runOnJS(moveRight)();
+        e.translationX -= threshold;
+      } else if (e.translationX < -threshold) {
+        runOnJS(moveLeft)();
+        e.translationX += threshold;
+      }
+      if (e.translationY > threshold) {
+        runOnJS(moveDown)();
+        e.translationY -= threshold;
+      }
     })
     .onEnd((e) => {
-        if (e.velocityY > 1500) {
-            runOnJS(hardDrop)();
-        }
+      if (e.velocityY > 1500) {
+        runOnJS(hardDrop)();
+      }
     });
 
   const tapGesture = Gesture.Tap().onStart(() => {
-      runOnJS(rotate)();
+    runOnJS(rotate)();
   });
 
   const composedGesture = Gesture.Simultaneous(panGesture, tapGesture);
 
   if (!cellSize) return null;
 
-  const nextPiece = TETROMINOS[nextPieceType];
-  const holdPieceData = holdPieceType ? TETROMINOS[holdPieceType] : null;
-
-  let ghostR = 0;
-  if (currentPiece) {
-      ghostR = currentPiece.r;
-      while (isValidMove(currentPiece.shape, ghostR + 1, currentPiece.c, grid)) {
-          ghostR++;
-      }
-  }
-
-  // Precompute level
-  const currentLevel = Math.floor(score / 500) + 1;
+  const ghostR = engine.getGhostY();
+  const currentLevel = level;
 
   return (
     <View style={styles.root}>
@@ -382,7 +227,7 @@ export default function Tetris() {
           score={score}
           highScore={highScore}
           accentColor={ACCENT}
-          onBack={() => { setGameOver(true); router.replace('/'); }}
+          onBack={() => { router.replace('/'); }}
         />
 
         <ControlsOverlay
@@ -405,9 +250,9 @@ export default function Tetris() {
                 <View style={[styles.sideCard, glassmorphism(), !canHold && { opacity: 0.5 }]}>
                     <Text style={[styles.sideTitle, { color: ACCENT }]}>HOLD</Text>
                     <TouchableOpacity onPress={holdPiece} activeOpacity={0.7} style={styles.miniGrid}>
-                        {holdPieceData && holdPieceData.shape.map((row, r) => (
+                        {holdPieceData && holdPieceData.shape.map((row: number[], r: number) => (
                             <View key={`hr-${r}`} style={{ flexDirection: 'row' }}>
-                                {row.map((val, c) => (
+                                {row.map((val: number, c: number) => (
                                     <View
                                         key={`hc-${c}`}
                                         style={[
@@ -434,9 +279,9 @@ export default function Tetris() {
                 <View style={styles.boardWrapper}>
                     <View style={[styles.board, glassmorphism(), { padding: 2, borderRadius: 6 }]}>
                         {/* Grid Background */}
-                        {grid.map((row, r) => (
+                        {grid.map((row: string[], r: number) => (
                             <View key={`r-${r}`} style={styles.row}>
-                                {row.map((cell, c) => (
+                                {row.map((cell: string, c: number) => (
                                     <View
                                         key={`c-${c}`}
                                         style={[
@@ -463,20 +308,20 @@ export default function Tetris() {
                         ))}
                         
                         {/* Animated Ghost Piece */}
-                        {currentPiece && currentPiece.shape.map((row, r) =>
-                            row.map((val, c) => {
+                        {currentPiece && currentPiece.shape.map((row: number[], r: number) =>
+                            row.map((val: number, c: number) => {
                                 if (val) {
-                                    return <AnimatedPieceCell key={`g-${r}-${c}`} r={ghostR + r} c={currentPiece.c + c} cellSize={cellSize} color={currentPiece.color} isGhost={true} />;
+                                    return <AnimatedPieceCell key={`g-${r}-${c}`} r={ghostR + r} c={currentPiece.x + c} cellSize={cellSize} color={currentPiece.color} isGhost={true} />;
                                 }
                                 return null;
                             })
                         )}
 
                         {/* Animated Current Piece */}
-                        {currentPiece && currentPiece.shape.map((row, r) =>
-                            row.map((val, c) => {
+                        {currentPiece && currentPiece.shape.map((row: number[], r: number) =>
+                            row.map((val: number, c: number) => {
                                 if (val) {
-                                    return <AnimatedPieceCell key={`p-${r}-${c}`} r={currentPiece.r + r} c={currentPiece.c + c} cellSize={cellSize} color={currentPiece.color} />;
+                                    return <AnimatedPieceCell key={`p-${r}-${c}`} r={currentPiece.y + r} c={currentPiece.x + c} cellSize={cellSize} color={currentPiece.color} />;
                                 }
                                 return null;
                             })
@@ -504,9 +349,9 @@ export default function Tetris() {
                 <View style={[styles.sideCard, glassmorphism()]}>
                     <Text style={[styles.sideTitle, { color: ACCENT }]}>NEXT</Text>
                     <View style={styles.miniGrid}>
-                        {nextPiece.shape.map((row, r) => (
+                        {nextPiece.shape.map((row: number[], r: number) => (
                             <View key={`nr-${r}`} style={{ flexDirection: 'row' }}>
-                                {row.map((val, c) => (
+                                {row.map((val: number, c: number) => (
                                     <View
                                         key={`nc-${c}`}
                                         style={[

@@ -35,9 +35,21 @@ const SEED_BOARD = [
   [3, 4, 5, 2, 8, 6, 1, 7, 9],
 ];
 
-const DIFF_COLORS = { EASY: SUCCESS, MEDIUM: WARNING, HARD: ACCENT_PURPLE };
+const DIFF_COLORS: Record<SudokuDifficulty, string> = { EASY: SUCCESS, MEDIUM: WARNING, HARD: ACCENT_PURPLE };
 
-function SegmentedControl({ options, labels, value, onChange, activeColor }) {
+function SegmentedControl({
+  options,
+  labels,
+  value,
+  onChange,
+  activeColor,
+}: {
+  options: SudokuDifficulty[];
+  labels: string[];
+  value: SudokuDifficulty;
+  onChange: (val: SudokuDifficulty) => void;
+  activeColor: string;
+}) {
   return (
     <View style={styles.segmented}>
       {options.map((opt, i) => {
@@ -70,7 +82,25 @@ function SegmentedControl({ options, labels, value, onChange, activeColor }) {
   );
 }
 
-function SudokuCell({ cell, r, c, cellSize, isSelected, isHighlight, isRelated, onPress }) {
+function SudokuCell({
+  cell,
+  r,
+  c,
+  cellSize,
+  isSelected,
+  isHighlight,
+  isRelated,
+  onPress,
+}: {
+  cell: any;
+  r: number;
+  c: number;
+  cellSize: number;
+  isSelected: boolean;
+  isHighlight: boolean;
+  isRelated: boolean;
+  onPress: () => void;
+}) {
   const scale = useSharedValue(1);
   const shake = useSharedValue(0);
 
@@ -142,192 +172,105 @@ function SudokuCell({ cell, r, c, cellSize, isSelected, isHighlight, isRelated, 
   );
 }
 
-export default function Sudoku() {
-  const [difficulty, setDifficulty] = useState('EASY');
-  const [board, setBoard] = useState([]);
-  const [solution, setSolution] = useState([]);
-  const [selectedCell, setSelectedCell] = useState(null);
-  const [history, setHistory] = useState([]);
-  const [future, setFuture] = useState([]);
-  const [timer, setTimer] = useState(0);
-  const [hints, setHints] = useState(3);
-  const [isWon, setIsWon] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const [mistakes, setMistakes] = useState(0);
-  const [gameStarted, setGameStarted] = useState(false);
+import { useEngine, SudokuEngine, SudokuDifficulty } from '../src/engines';
 
-  const timerRef = useRef(null);
-  const inputRef = useRef(null);
+export default function Sudoku() {
+  const [gameState, engine] = useEngine(() => new SudokuEngine());
+  const {
+    board,
+    selectedRow,
+    selectedCol,
+    difficulty,
+    mistakes,
+    timerSeconds: timer,
+    hints,
+    canUndo,
+    canRedo,
+    isComplete: isWon,
+    isPaused,
+    gameOver,
+  } = gameState;
+
+  const inputRef = useRef<TextInput>(null);
 
   useEffect(() => {
-    if (gameStarted && !isWon && !isPaused) {
-      timerRef.current = setInterval(() => setTimer(t => t + 1), 1000);
-    }
-    return () => clearInterval(timerRef.current);
-  }, [gameStarted, isWon, isPaused]);
+    const interval = setInterval(() => {
+      engine.tickTimer();
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
-  useEffect(() => { initGame('EASY'); }, []);
-
-  const initGame = (diff) => {
-    let sol = SEED_BOARD.map(row => [...row]);
-    const numMap = [1, 2, 3, 4, 5, 6, 7, 8, 9].sort(() => Math.random() - 0.5);
-    sol = sol.map(row => row.map(val => numMap[val - 1]));
-    setSolution(sol);
-
-    const toRemove = diff === 'EASY' ? 30 : diff === 'MEDIUM' ? 45 : 60;
-    let b = sol.map(row =>
-      row.map(val => ({ val, isGiven: true, notes: new Set(), isError: false }))
-    );
-
-    let removed = 0;
-    while (removed < toRemove) {
-      const r = Math.floor(Math.random() * 9);
-      const c = Math.floor(Math.random() * 9);
-      if (b[r][c].val !== 0) {
-        b[r][c].val = 0;
-        b[r][c].isGiven = false;
-        removed++;
-      }
-    }
-
-    setBoard(b);
-    setHistory([b]);
-    setFuture([]);
-    setDifficulty(diff);
-    setSelectedCell(null);
-    setTimer(0);
-    setHints(3);
-    setIsWon(false);
-    setIsPaused(false);
-    setMistakes(0);
-    setGameStarted(true);
-  };
-
-  const saveHistory = (newBoard) => {
-    setHistory(prev => [...prev.slice(-20), newBoard]);
-    setFuture([]);
-  };
-
-  const deepCopyBoard = (b) =>
-    b.map(row => row.map(cell => ({ ...cell, notes: new Set(cell.notes) })));
-
-  const handleInput = useCallback((num) => {
-    if (!selectedCell || isWon || isPaused) return;
-    const { r, c } = selectedCell;
-    if (board[r][c].isGiven) return;
-
+  const handleInput = useCallback((num: number) => {
+    if (isWon || isPaused || gameOver) return;
     tapLight();
-    const newBoard = deepCopyBoard(board);
-
-    if (num === 0) {
-      newBoard[r][c].val = 0;
-      newBoard[r][c].isError = false;
-      newBoard[r][c].notes.clear();
-    } else {
-      newBoard[r][c].val = num;
-      newBoard[r][c].notes.clear();
-      const correct = num === solution[r][c];
-      newBoard[r][c].isError = !correct;
-      if (!correct) {
-        notifyError();
-        setMistakes(m => m + 1);
-      }
+    const correct = engine.enterNumber(num);
+    if (num > 0 && !correct) {
+      notifyError();
     }
-
-    setBoard(newBoard);
-    saveHistory(newBoard);
-    checkWin(newBoard);
-  }, [selectedCell, isWon, isPaused, board, solution]);
+  }, [isWon, isPaused, gameOver]);
 
   const useHint = () => {
-    if (!selectedCell || hints <= 0 || isWon || isPaused) return;
-    const { r, c } = selectedCell;
-    if (board[r][c].isGiven || board[r][c].val === solution[r][c]) return;
-
+    if (hints <= 0 || isWon || isPaused || gameOver) return;
     tapMedium();
-    const newBoard = deepCopyBoard(board);
-    newBoard[r][c].val = solution[r][c];
-    newBoard[r][c].isError = false;
-    newBoard[r][c].notes.clear();
-    setBoard(newBoard);
-    saveHistory(newBoard);
-    setHints(h => h - 1);
-    checkWin(newBoard);
+    engine.useHint();
   };
 
   const undo = () => {
-    if (history.length <= 1 || isPaused) return;
+    if (!canUndo || isPaused) return;
     tapMedium();
-    const current = history[history.length - 1];
-    const prev = history[history.length - 2];
-    setFuture(f => [current, ...f]);
-    setHistory(h => h.slice(0, -1));
-    setBoard(prev);
+    engine.undo();
   };
 
   const redo = () => {
-    if (future.length === 0 || isPaused) return;
+    if (!canRedo || isPaused) return;
     tapMedium();
-    const next = future[0];
-    setHistory(h => [...h, next]);
-    setFuture(f => f.slice(1));
-    setBoard(next);
+    engine.redo();
   };
 
-  const checkWin = (b) => {
-    for (let r = 0; r < 9; r++)
-      for (let c = 0; c < 9; c++)
-        if (b[r][c].val !== solution[r][c]) return;
-    setIsWon(true);
-    notifySuccess();
-  };
-
-  const handleCellTap = (r, c) => {
+  const handleCellTap = (r: number, c: number) => {
     if (isPaused) return;
     tapLight();
-    setSelectedCell({ r, c });
+    engine.selectCell(r, c);
     if (Platform.OS !== 'web') {
       inputRef.current?.focus();
     }
   };
 
-  useKeyboard((key) => {
+  useKeyboard((key: string) => {
     if (isPaused) return;
     const k = key;
     if (['1','2','3','4','5','6','7','8','9'].includes(k)) {
-      handleInput(parseInt(k));
+      handleInput(parseInt(k, 10));
     } else if (k === 'Backspace' || k === 'Delete' || k === '0') {
       handleInput(0);
     } else if (k === 'h' || k === 'H') {
       useHint();
     } else if (k === 'Tab') {
-      if (selectedCell) {
-        const { r, c } = selectedCell;
-        let nextR = r, nextC = c + 1;
+      if (selectedRow !== null && selectedCol !== null) {
+        let nextR = selectedRow, nextC = selectedCol + 1;
         if (nextC > 8) {
           nextC = 0;
-          nextR = (r + 1) % 9;
+          nextR = (selectedRow + 1) % 9;
         }
-        setSelectedCell({ r: nextR, c: nextC });
+        engine.selectCell(nextR, nextC);
       } else {
-        setSelectedCell({ r: 0, c: 0 });
+        engine.selectCell(0, 0);
       }
-    } else if (selectedCell) {
-      const { r, c } = selectedCell;
+    } else if (selectedRow !== null && selectedCol !== null) {
       if (k === 'ArrowUp' || k === 'w')
-        setSelectedCell({ r: Math.max(0, r - 1), c });
+        engine.selectCell(Math.max(0, selectedRow - 1), selectedCol);
       else if (k === 'ArrowDown' || k === 's')
-        setSelectedCell({ r: Math.min(8, r + 1), c });
+        engine.selectCell(Math.min(8, selectedRow + 1), selectedCol);
       else if (k === 'ArrowLeft' || k === 'a')
-        setSelectedCell({ r, c: Math.max(0, c - 1) });
+        engine.selectCell(selectedRow, Math.max(0, selectedCol - 1));
       else if (k === 'ArrowRight' || k === 'd')
-        setSelectedCell({ r, c: Math.min(8, c + 1) });
+        engine.selectCell(selectedRow, Math.min(8, selectedCol + 1));
     }
-  }, [selectedCell, handleInput, useHint, isPaused]);
+  }, { disableRepeat: true, preventDefault: true });
 
   const isDesktop = screenWidth >= 768;
 
-  const formatTime = (secs) => {
+  const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
     const s = secs % 60;
     return `${m}:${s.toString().padStart(2, '0')}`;
@@ -352,27 +295,27 @@ export default function Sudoku() {
           showsVerticalScrollIndicator={false}
           bounces={false}
         >
-          <View style={[styles.settingsPanel, glassmorphism(PANEL_BG)]}>
+          <View style={[styles.settingsPanel, styles.panelBg]}>
             <Text style={styles.settingLabel}>DIFFICULTY</Text>
             <SegmentedControl
               options={['EASY', 'MEDIUM', 'HARD']}
               labels={['EASY', 'MEDIUM', 'HARD']}
               value={difficulty}
-              onChange={(d) => initGame(d)}
+              onChange={(d: SudokuDifficulty) => engine.setDifficulty(d)}
               activeColor={DIFF_COLORS[difficulty]}
             />
           </View>
 
           <View style={styles.statusBar}>
-            <View style={[styles.statusPill, glassmorphism(PANEL_BG)]}>
+            <View style={[styles.statusPill, styles.panelBg]}>
               <Text style={styles.statusIcon}>⏱</Text>
               <Text style={styles.statusValue}>{formatTime(timer)}</Text>
             </View>
-            <View style={[styles.statusPill, glassmorphism(PANEL_BG), { borderColor: mistakes > 0 ? `${DANGER}50` : 'transparent' }]}>
+            <View style={[styles.statusPill, styles.panelBg, { borderColor: mistakes > 0 ? `${DANGER}50` : 'transparent' }]}>
               <Text style={styles.statusIcon}>✗</Text>
-              <Text style={[styles.statusValue, { color: mistakes > 0 ? DANGER : Colors.text.secondary }]}>{mistakes}</Text>
+              <Text style={[styles.statusValue, { color: mistakes > 0 ? DANGER : Colors.text.secondary }]}>{mistakes}/3</Text>
             </View>
-            <View style={[styles.statusPill, glassmorphism(PANEL_BG), { borderColor: hints > 0 ? `${WARNING}40` : 'transparent' }]}>
+            <View style={[styles.statusPill, styles.panelBg, { borderColor: hints > 0 ? `${WARNING}40` : 'transparent' }]}>
               <Text style={styles.statusIcon}>💡</Text>
               <Text style={[styles.statusValue, { color: hints > 0 ? WARNING : Colors.text.muted }]}>{hints}</Text>
             </View>
@@ -381,16 +324,16 @@ export default function Sudoku() {
           <View style={styles.gameLayout}>
             <View style={[styles.boardWrapper, { width: boardWidth + 4, height: boardWidth + 4 }]}>
               <View style={[styles.board, { width: boardWidth, height: boardWidth }]}>
-                {board.map((row, r) => (
+                {board.map((row: any[], r: number) => (
                   <View key={r} style={{ flexDirection: 'row' }}>
-                    {row.map((cell, c) => {
-                      const isSelected = selectedCell?.r === r && selectedCell?.c === c;
-                      const selVal = selectedCell ? board[selectedCell.r]?.[selectedCell.c]?.val : 0;
+                    {row.map((cell: any, c: number) => {
+                      const isSelected = selectedRow === r && selectedCol === c;
+                      const selVal = selectedRow !== null && selectedCol !== null ? board[selectedRow]?.[selectedCol]?.val : 0;
                       const isHighlight = !isSelected && selVal !== 0 && cell.val === selVal;
-                      const isRelated = !isSelected && !!selectedCell && (
-                        selectedCell.r === r || selectedCell.c === c ||
-                        (Math.floor(selectedCell.r / 3) === Math.floor(r / 3) &&
-                          Math.floor(selectedCell.c / 3) === Math.floor(c / 3))
+                      const isRelated = !isSelected && selectedRow !== null && selectedCol !== null && (
+                        selectedRow === r || selectedCol === c ||
+                        (Math.floor(selectedRow / 3) === Math.floor(r / 3) &&
+                          Math.floor(selectedCol / 3) === Math.floor(c / 3))
                       );
                       return (
                         <SudokuCell
@@ -411,26 +354,26 @@ export default function Sudoku() {
 
             <View style={styles.controlsContainer}>
               <View style={styles.toolbar}>
-                <TouchableOpacity style={[styles.toolBtn, glassmorphism(PANEL_BG), history.length <= 1 && styles.toolBtnDisabled]} onPress={undo}>
+                <TouchableOpacity style={[styles.toolBtn, styles.panelBg, !canUndo && styles.toolBtnDisabled]} onPress={undo}>
                   <Text style={styles.toolBtnIcon}>↩</Text>
                   <Text style={styles.toolBtnLabel}>UNDO</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.toolBtn, glassmorphism(PANEL_BG), future.length === 0 && styles.toolBtnDisabled]} onPress={redo}>
+                <TouchableOpacity style={[styles.toolBtn, styles.panelBg, !canRedo && styles.toolBtnDisabled]} onPress={redo}>
                   <Text style={styles.toolBtnIcon}>↪</Text>
                   <Text style={styles.toolBtnLabel}>REDO</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.toolBtn, glassmorphism(PANEL_BG)]} onPress={() => handleInput(0)}>
+                <TouchableOpacity style={[styles.toolBtn, styles.panelBg]} onPress={() => handleInput(0)}>
                   <Text style={styles.toolBtnIcon}>⌫</Text>
                   <Text style={styles.toolBtnLabel}>ERASE</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.toolBtn, glassmorphism(PANEL_BG), hints === 0 && styles.toolBtnDisabled]}
+                  style={[styles.toolBtn, styles.panelBg, hints === 0 && styles.toolBtnDisabled]}
                   onPress={useHint}
                 >
                   <Text style={styles.toolBtnIcon}>💡</Text>
                   <Text style={[styles.toolBtnLabel, { color: hints > 0 ? WARNING : Colors.text.muted }]}>HINT</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.toolBtn, glassmorphism(PANEL_BG)]} onPress={() => setIsPaused(true)}>
+                <TouchableOpacity style={[styles.toolBtn, styles.panelBg]} onPress={() => engine.togglePause(true)}>
                   <Text style={styles.toolBtnIcon}>⏸</Text>
                   <Text style={styles.toolBtnLabel}>PAUSE</Text>
                 </TouchableOpacity>
@@ -443,7 +386,7 @@ export default function Sudoku() {
                 maxLength={1}
                 value=""
                 onChangeText={(text) => {
-                  const num = parseInt(text);
+                  const num = parseInt(text, 10);
                   if (!isNaN(num) && num > 0 && num <= 9) {
                     handleInput(num);
                   }
@@ -466,20 +409,20 @@ export default function Sudoku() {
           <View style={styles.pauseOverlay}>
             <Text style={styles.pausedTitle}>PAUSED</Text>
             <Text style={styles.pausedSub}>Take a breath, your timer is frozen.</Text>
-            <TouchableOpacity style={styles.resumeBtn} onPress={() => setIsPaused(false)}>
+            <TouchableOpacity style={styles.resumeBtn} onPress={() => engine.togglePause(false)}>
               <Text style={styles.resumeBtnText}>RESUME</Text>
             </TouchableOpacity>
           </View>
         )}
 
         <GameOverModal
-          visible={isWon}
-          title="PUZZLE SOLVED! 🎉"
-          score={formatTime(timer)}
+          visible={isWon || gameOver}
+          title={isWon ? "PUZZLE SOLVED! 🎉" : "GAME OVER"}
+          score={isWon ? formatTime(timer) : `${mistakes} Mistakes`}
           highScore={''}
           isNewHighScore={false}
-          accentColor={ACCENT_BLUE}
-          onRestart={() => initGame(difficulty)}
+          accentColor={isWon ? ACCENT_BLUE : DANGER}
+          onRestart={() => engine.reset()}
           onHome={() => router.replace('/')}
         />
       </SafeAreaView>
@@ -490,6 +433,11 @@ export default function Sudoku() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: DARK_BLUE_BG },
   safe: { flex: 1 },
+  panelBg: {
+    backgroundColor: PANEL_BG,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
   scrollContent: {
     alignItems: 'center',
     paddingHorizontal: Spacing[2],

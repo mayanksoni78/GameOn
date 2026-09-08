@@ -57,123 +57,23 @@ const DIFFICULTIES: Record<Difficulty, DiffConfig> = {
   HARD:   { label: 'Hard',   tomCount: 3, tomSpeed: 280, targetScore: 1500, color: '#6A5ACD' }, 
 };
 
-// ── Maze Config ───────────────────────────────────────────────────────────────
-// Increased maze size to 21x21 for smaller cells and cleaner layout
-const MAZE_ROWS = 21;
-const MAZE_COLS = 21;
+import { useEngine, TomAndJerryEngine, TomAndJerryDifficulty } from '../src/engines';
 
-const HEADER_HEIGHT = 160; // Increased to fit top controls
+// ── Maze Config ───────────────────────────────────────────────────────────────
+const MAZE_ROWS = TomAndJerryEngine.ROWS;
+const MAZE_COLS = TomAndJerryEngine.COLS;
+
+const HEADER_HEIGHT = 160;
 const BOTTOM_HEIGHT = 80;
 const VIEWPORT_HEIGHT = screenHeight - HEADER_HEIGHT - BOTTOM_HEIGHT - 40;
 const VIEWPORT_WIDTH = screenWidth - 16;
 const CELL_SIZE = Math.min(
   Math.floor(VIEWPORT_WIDTH / MAZE_COLS),
   Math.floor(VIEWPORT_HEIGHT / MAZE_ROWS),
-  28 // Capped slightly smaller
+  28
 );
 const MAZE_PX_W = CELL_SIZE * MAZE_COLS;
 const MAZE_PX_H = CELL_SIZE * MAZE_ROWS;
-
-// ── Maze Generation (Recursive Backtracker) ───────────────────────────────────
-function generateMaze(): number[][] {
-  const grid: number[][] = Array.from({ length: MAZE_ROWS }, () => Array(MAZE_COLS).fill(0));
-  const stack: [number, number][] = [];
-  const start: [number, number] = [1, 1];
-  grid[start[0]][start[1]] = 1;
-  stack.push(start);
-
-  while (stack.length > 0) {
-    const [cr, cc] = stack[stack.length - 1];
-    const neighbors: [number, number, number, number][] = [];
-    for (const [dr, dc] of [[0, -2], [0, 2], [-2, 0], [2, 0]]) {
-      const nr = cr + dr;
-      const nc = cc + dc;
-      if (nr > 0 && nr < MAZE_ROWS - 1 && nc > 0 && nc < MAZE_COLS - 1 && grid[nr][nc] === 0) {
-        neighbors.push([nr, nc, cr + dr / 2, cc + dc / 2]);
-      }
-    }
-    if (neighbors.length === 0) {
-      stack.pop();
-    } else {
-      const pick = neighbors[Math.floor(Math.random() * neighbors.length)];
-      grid[pick[0]][pick[1]] = 1;
-      grid[pick[2]][pick[3]] = 1;
-      stack.push([pick[0], pick[1]]);
-    }
-  }
-
-  for (let i = 0; i < Math.floor(MAZE_ROWS * MAZE_COLS * 0.05); i++) {
-    const r = 2 + Math.floor(Math.random() * (MAZE_ROWS - 4));
-    const c = 2 + Math.floor(Math.random() * (MAZE_COLS - 4));
-    if (grid[r][c] === 0) {
-      let adj = 0;
-      if (grid[r - 1]?.[c] === 1) adj++;
-      if (grid[r + 1]?.[c] === 1) adj++;
-      if (grid[r]?.[c - 1] === 1) adj++;
-      if (grid[r]?.[c + 1] === 1) adj++;
-      if (adj >= 2) grid[r][c] = 1;
-    }
-  }
-  return grid;
-}
-
-function getPathCells(maze: number[][]): Pos[] {
-  const cells: Pos[] = [];
-  for (let r = 0; r < maze.length; r++) {
-    for (let c = 0; c < maze[0].length; c++) {
-      if (maze[r][c] === 1) cells.push({ r, c });
-    }
-  }
-  return cells;
-}
-
-function bfsNextStep(maze: number[][], from: Pos, to: Pos): Pos {
-  if (from.r === to.r && from.c === to.c) return from;
-  const rows = maze.length;
-  const cols = maze[0].length;
-  const visited = Array.from({ length: rows }, () => Array(cols).fill(false));
-  const parent = Array.from({ length: rows }, () => Array(cols).fill(null)) as (Pos | null)[][];
-  
-  const queue: Pos[] = [from];
-  visited[from.r][from.c] = true;
-  
-  while (queue.length > 0) {
-    const curr = queue.shift()!;
-    if (curr.r === to.r && curr.c === to.c) {
-      let step: Pos = curr;
-      while (parent[step.r][step.c] && !(parent[step.r][step.c]!.r === from.r && parent[step.r][step.c]!.c === from.c)) {
-        step = parent[step.r][step.c]!;
-      }
-      return step;
-    }
-    for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
-      const nr = curr.r + dr;
-      const nc = curr.c + dc;
-      if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && !visited[nr][nc] && maze[nr][nc] === 1) {
-        visited[nr][nc] = true;
-        parent[nr][nc] = curr;
-        queue.push({ r: nr, c: nc });
-      }
-    }
-  }
-  return from;
-}
-
-function randomPathPos(maze: number[][], exclude: Pos[]): Pos {
-  const paths = getPathCells(maze).filter(p => !exclude.some(e => e.r === p.r && e.c === p.c));
-  return paths[Math.floor(Math.random() * paths.length)] || { r: 1, c: 1 };
-}
-
-function spawnCheese(maze: number[][], count: number, exclude: Pos[]): Pos[] {
-  const result: Pos[] = [];
-  const used = [...exclude];
-  for (let i = 0; i < count; i++) {
-    const pos = randomPathPos(maze, used);
-    result.push(pos);
-    used.push(pos);
-  }
-  return result;
-}
 
 // ── CSS Sprites ─────────────────────────────────────────────────────────────
 
@@ -344,236 +244,128 @@ const bgStyles = StyleSheet.create({
 
 // ── Main Game Component ───────────────────────────────────────────────────────
 export default function JerryVsTomGame() {
-  const [difficulty, setDifficulty] = useState<Difficulty>('EASY');
-  const [gameState, setGameState] = useState<GameState>('idle');
-  const [maze, setMaze] = useState<number[][]>([]);
-  const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(0);
-  const [cheeses, setCheeses] = useState<Pos[]>([]);
-  const [cheeseCount, setCheeseCount] = useState(0);
+  const [gameState, engine] = useEngine(() => new TomAndJerryEngine());
+  const {
+    maze,
+    jerryPos,
+    tomPositions,
+    cheeses,
+    cheeseCount,
+    score,
+    highScore,
+    difficulty,
+    status,
+  } = gameState;
 
-  const [jerryPos, setJerryPos] = useState<Pos>({ r: 1, c: 1 });
-  const [tomPositions, setTomPositions] = useState<Pos[]>([]);
-
-  const mazeRef = useRef(maze);
-  const jerryPosRef = useRef(jerryPos);
-  const tomPosRef = useRef(tomPositions);
-  const cheesesRef = useRef(cheeses);
-  const stateRef = useRef(gameState);
-  const scoreRef = useRef(score);
-  const tomTimerRef = useRef<any>(null);
+  const engineRef = useRef(engine);
+  engineRef.current = engine;
   const isMovingRef = useRef(false);
 
   const jerryAnimX = useSharedValue(CELL_SIZE);
   const jerryAnimY = useSharedValue(CELL_SIZE);
   const jerryScale = useSharedValue(1);
 
-  useEffect(() => { mazeRef.current = maze; }, [maze]);
-  useEffect(() => { jerryPosRef.current = jerryPos; }, [jerryPos]);
-  useEffect(() => { tomPosRef.current = tomPositions; }, [tomPositions]);
-  useEffect(() => { cheesesRef.current = cheeses; }, [cheeses]);
-  useEffect(() => { stateRef.current = gameState; }, [gameState]);
-  useEffect(() => { scoreRef.current = score; }, [score]);
-
   useEffect(() => {
-    AsyncStorage.getItem('jerry_tom_hs').then(v => v && setHighScore(parseInt(v)));
-    // Generate initial idle maze so the board isn't completely blank
-    setMaze(generateMaze());
+    AsyncStorage.getItem('jerry_tom_hs').then(v => {
+      if (v) {
+        const hs = parseInt(v, 10);
+        if (hs > engine.getHighScore()) {
+          engine.setHighScore(hs);
+        }
+      }
+    });
   }, []);
 
   const config = DIFFICULTIES[difficulty];
 
   // ── Start Game ──────────────────────────────────────────────────────────────
   const startGame = useCallback((diff: Difficulty = difficulty) => {
-    clearInterval(tomTimerRef.current);
-    const cfg = DIFFICULTIES[diff];
-    const newMaze = generateMaze();
-    setMaze(newMaze);
-
-    const jPos: Pos = { r: 1, c: 1 };
-    setJerryPos(jPos);
-    jerryAnimX.value = jPos.c * CELL_SIZE;
-    jerryAnimY.value = jPos.r * CELL_SIZE;
+    engine.startGame(diff as TomAndJerryDifficulty);
+    jerryAnimX.value = 1 * CELL_SIZE;
+    jerryAnimY.value = 1 * CELL_SIZE;
     isMovingRef.current = false;
-
-    const tomStarts: Pos[] = [];
-    const farCorners: Pos[] = [
-      { r: MAZE_ROWS - 2, c: MAZE_COLS - 2 },
-      { r: 1, c: MAZE_COLS - 2 },
-      { r: MAZE_ROWS - 2, c: 1 },
-    ];
-    for (let i = 0; i < cfg.tomCount; i++) {
-      let target = farCorners[i % farCorners.length];
-      while (newMaze[target.r]?.[target.c] !== 1 && target.r > 1 && target.c > 1) {
-        target = { r: target.r - 1, c: target.c - 1 };
-      }
-      if (newMaze[target.r]?.[target.c] !== 1) {
-        target = randomPathPos(newMaze, [jPos, ...tomStarts]);
-      }
-      tomStarts.push(target);
-    }
-    setTomPositions(tomStarts);
-
-    const initialCheese = spawnCheese(newMaze, 5, [jPos, ...tomStarts]); 
-    setCheeses(initialCheese);
-
-    setScore(0);
-    setCheeseCount(0);
-    setDifficulty(diff);
-    setGameState('playing');
     tapMedium();
+  }, [difficulty, jerryAnimX, jerryAnimY, engine]);
 
-    tomTimerRef.current = setInterval(() => {
-      if (stateRef.current !== 'playing') return;
-      
-      setTomPositions(prevToms => {
-        const m = mazeRef.current;
-        const jp = jerryPosRef.current;
-        if (!m.length) return prevToms;
-        
-        const newToms = prevToms.map(tom => bfsNextStep(m, tom, jp));
-
-        for (const tom of newToms) {
-          if (tom.r === jp.r && tom.c === jp.c) {
-            clearInterval(tomTimerRef.current);
-            setTimeout(() => {
-              setGameState('lost');
-              notifyError();
-              const s = scoreRef.current;
-              AsyncStorage.getItem('jerry_tom_hs').then(v => {
-                const hs = v ? parseInt(v) : 0;
-                if (s > hs) {
-                  setHighScore(s);
-                  AsyncStorage.setItem('jerry_tom_hs', s.toString());
-                }
-              });
-            }, 0);
-          }
+  useEffect(() => {
+    if (status !== 'playing') return;
+    const interval = setInterval(() => {
+      const alive = engineRef.current.tickToms();
+      if (!alive) {
+        notifyError();
+        const s = engineRef.current.getScore();
+        if (s > engineRef.current.getHighScore()) {
+          AsyncStorage.setItem('jerry_tom_hs', s.toString());
         }
-        return newToms;
-      });
-    }, cfg.tomSpeed);
-  }, [difficulty, jerryAnimX, jerryAnimY]);
-
-  useEffect(() => () => clearInterval(tomTimerRef.current), []);
+      }
+    }, config.tomSpeed);
+    return () => clearInterval(interval);
+  }, [status, config.tomSpeed]);
 
   // ── Move Jerry ──────────────────────────────────────────────────────────────
   const moveJerry = useCallback((dir: Direction) => {
-    if (stateRef.current !== 'playing') return;
+    if (status !== 'playing') return;
     if (isMovingRef.current) return;
 
-    const m = mazeRef.current;
-    const pos = jerryPosRef.current;
-    let nr = pos.r, nc = pos.c;
-
+    let dr = 0, dc = 0;
     switch (dir) {
-      case 'UP':    nr--; break;
-      case 'DOWN':  nr++; break;
-      case 'LEFT':  nc--; break;
-      case 'RIGHT': nc++; break;
+      case 'UP':    dr = -1; break;
+      case 'DOWN':  dr = 1; break;
+      case 'LEFT':  dc = -1; break;
+      case 'RIGHT': dc = 1; break;
     }
 
-    if (nr < 0 || nr >= MAZE_ROWS || nc < 0 || nc >= MAZE_COLS) return;
-    if (m[nr][nc] === 0) return;
+    const res = engineRef.current.moveJerry(dr, dc);
+    if (!res.moved) return;
 
     isMovingRef.current = true;
-    const newPos = { r: nr, c: nc };
-    setJerryPos(newPos);
     tapLight();
 
+    if (res.ateCheese) {
+      notifySuccess();
+      const s = engineRef.current.getScore();
+      if (s > engineRef.current.getHighScore()) {
+        AsyncStorage.setItem('jerry_tom_hs', s.toString());
+      }
+    }
+    if (res.caught) {
+      notifyError();
+    }
+
+    const currentJerry = engineRef.current.getState().jerryPos;
     jerryScale.value = withSequence(
       withTiming(1.2, { duration: 30 }),
       withTiming(1, { duration: 30 })
     );
 
-    jerryAnimX.value = withTiming(nc * CELL_SIZE, { duration: 60, easing: Easing.linear });
-    jerryAnimY.value = withTiming(nr * CELL_SIZE, { duration: 60, easing: Easing.linear }, (finished) => {
-      if (finished) runOnJS(onMoveComplete)(nr, nc);
-    });
-  }, [jerryAnimX, jerryAnimY, jerryScale]);
-
-  const onMoveComplete = (nr: number, nc: number) => {
-    isMovingRef.current = false;
-
-    const cs = cheesesRef.current;
-    const idx = cs.findIndex(ch => ch.r === nr && ch.c === nc);
-    if (idx !== -1) {
-      const newCheeses = [...cs];
-      newCheeses.splice(idx, 1);
-      const respawned = randomPathPos(mazeRef.current, [{ r: nr, c: nc }, ...tomPosRef.current, ...newCheeses]);
-      newCheeses.push(respawned);
-      setCheeses(newCheeses);
-      setCheeseCount(prev => prev + 1);
-      setScore(prev => prev + 25);
-    }
-
-    const toms = tomPosRef.current;
-    for (const tom of toms) {
-      if (tom.r === nr && tom.c === nc) {
-        clearInterval(tomTimerRef.current);
-        setGameState('lost');
-        notifyError();
-        const s = scoreRef.current;
-        if (s > highScore) {
-          setHighScore(s);
-          AsyncStorage.setItem('jerry_tom_hs', s.toString());
-        }
-        return;
+    jerryAnimX.value = withTiming(currentJerry.c * CELL_SIZE, { duration: 60, easing: Easing.linear });
+    jerryAnimY.value = withTiming(currentJerry.r * CELL_SIZE, { duration: 60, easing: Easing.linear }, (finished) => {
+      if (finished) {
+        isMovingRef.current = false;
       }
-    }
-  };
-
-  const resumeGame = () => {
-    setGameState('playing');
-    const cfg = DIFFICULTIES[difficulty];
-    tomTimerRef.current = setInterval(() => {
-      if (stateRef.current !== 'playing') return;
-      setTomPositions(prevToms => {
-        const m = mazeRef.current;
-        const jp = jerryPosRef.current;
-        if (!m.length) return prevToms;
-        const newToms = prevToms.map(tom => bfsNextStep(m, tom, jp));
-        for (const tom of newToms) {
-          if (tom.r === jp.r && tom.c === jp.c) {
-            clearInterval(tomTimerRef.current);
-            setTimeout(() => {
-              setGameState('lost');
-              notifyError();
-            }, 0);
-          }
-        }
-        return newToms;
-      });
-    }, cfg.tomSpeed);
-  };
+    });
+  }, [status, jerryAnimX, jerryAnimY, jerryScale]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape' || e.key.toLowerCase() === 'p') {
         e.preventDefault();
-        if (stateRef.current === 'playing') {
-          clearInterval(tomTimerRef.current);
-          setGameState('paused');
-        } else if (stateRef.current === 'paused') {
-          resumeGame();
-        }
+        engineRef.current.togglePause();
         return;
       }
       if (e.key === 'Enter') {
         e.preventDefault();
         e.stopPropagation();
-        if (stateRef.current === 'idle' || stateRef.current === 'lost') {
+        const currentStatus = engineRef.current.getState().status;
+        if (currentStatus === 'idle' || currentStatus === 'lost' || currentStatus === 'won') {
           startGame(difficulty);
-        } else if (stateRef.current === 'playing') {
-          clearInterval(tomTimerRef.current);
-          setGameState('paused');
-        } else if (stateRef.current === 'paused') {
-          resumeGame();
+        } else {
+          engineRef.current.togglePause();
         }
         return;
       }
-      if (stateRef.current !== 'playing') return;
+      if (engineRef.current.getState().status !== 'playing') return;
       if (e.key === 'ArrowUp'    || e.key.toLowerCase() === 'w') { e.preventDefault(); moveJerry('UP'); }
       if (e.key === 'ArrowDown'  || e.key.toLowerCase() === 's') { e.preventDefault(); moveJerry('DOWN'); }
       if (e.key === 'ArrowLeft'  || e.key.toLowerCase() === 'a') { e.preventDefault(); moveJerry('LEFT'); }
@@ -591,7 +383,7 @@ export default function JerryVsTomGame() {
   };
 
   const handleTouchEnd = (e: any) => {
-    if (gameState !== 'playing') return;
+    if (status !== 'playing') return;
     const touch = e.nativeEvent;
     const dx = touch.pageX - touchStartRef.current.x;
     const dy = touch.pageY - touchStartRef.current.y;
@@ -670,12 +462,12 @@ export default function JerryVsTomGame() {
                             difficulty === d && { backgroundColor: `${DIFFICULTIES[d].color}30`, borderColor: DIFFICULTIES[d].color }
                         ]}
                         onPress={() => {
-                            if (gameState === 'playing' || gameState === 'paused') return;
+                            if (status === 'playing' || status === 'paused') return;
                             tapLight(); 
-                            setDifficulty(d); 
+                            engine.setDifficulty(d as TomAndJerryDifficulty); 
                         }}
                         activeOpacity={0.7}
-                        disabled={gameState === 'playing' || gameState === 'paused'}
+                        disabled={status === 'playing' || status === 'paused'}
                     >
                         <Text style={[styles.diffBtnText, difficulty === d && { color: DIFFICULTIES[d].color }]}>
                             {DIFFICULTIES[d].label} ({DIFFICULTIES[d].tomCount} Tom{DIFFICULTIES[d].tomCount > 1 ? 's' : ''})
@@ -686,19 +478,18 @@ export default function JerryVsTomGame() {
             
             {/* Mobile Actions / Game State Actions */}
             <View style={styles.actionSelector}>
-                {gameState === 'idle' || gameState === 'lost' ? (
+                {status === 'idle' || status === 'lost' || status === 'won' ? (
                      <TouchableOpacity style={[styles.actionBtn, { backgroundColor: config.color }]} onPress={() => startGame(difficulty)}>
                          <Text style={styles.actionBtnText}>START (Enter)</Text>
                      </TouchableOpacity>
-                ) : gameState === 'playing' ? (
+                ) : status === 'playing' ? (
                      <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.accent.warning }]} onPress={() => {
-                         clearInterval(tomTimerRef.current);
-                         setGameState('paused');
+                         engine.togglePause();
                      }}>
                          <Text style={styles.actionBtnText}>PAUSE (Enter)</Text>
                      </TouchableOpacity>
                 ) : (
-                     <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.accent.success }]} onPress={resumeGame}>
+                     <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.accent.success }]} onPress={() => engine.togglePause()}>
                          <Text style={styles.actionBtnText}>RESUME (Enter)</Text>
                      </TouchableOpacity>
                 )}
@@ -726,7 +517,7 @@ export default function JerryVsTomGame() {
                 {floors}
                 {walls}
 
-                {(gameState !== 'idle') && cheeses.map((ch, i) => (
+                {(status !== 'idle') && cheeses.map((ch, i) => (
                   <View key={`ch-${i}`} style={[styles.spriteCell, {
                     left: ch.c * CELL_SIZE, top: ch.r * CELL_SIZE,
                     width: CELL_SIZE, height: CELL_SIZE,
@@ -735,7 +526,7 @@ export default function JerryVsTomGame() {
                   </View>
                 ))}
 
-                {(gameState !== 'idle') && tomPositions.map((tom, i) => (
+                {(status !== 'idle') && tomPositions.map((tom, i) => (
                   <View key={`tom-${i}`} style={[styles.spriteCell, {
                     left: tom.c * CELL_SIZE, top: tom.r * CELL_SIZE,
                     width: CELL_SIZE, height: CELL_SIZE,
@@ -744,7 +535,7 @@ export default function JerryVsTomGame() {
                   </View>
                 ))}
 
-                {(gameState !== 'idle') && (
+                {(status !== 'idle') && (
                   <Animated.View style={[styles.spriteCell, {
                     width: CELL_SIZE, height: CELL_SIZE,
                   }, jerryStyle]}>
@@ -753,7 +544,7 @@ export default function JerryVsTomGame() {
                 )}
               </View>
 
-              {gameState === 'paused' && (
+              {status === 'paused' && (
                 <View style={[styles.pausedOverlay, glassmorphism(0.85)]}>
                   <Text style={styles.pausedTitle}>⏸ PAUSED</Text>
                   <Text style={styles.pausedSub}>Press Enter to resume</Text>
@@ -768,8 +559,8 @@ export default function JerryVsTomGame() {
         </View>
 
         <GameOverModal
-          visible={gameState === 'lost'}
-          title="CAUGHT BY TOM!"
+          visible={status === 'lost' || status === 'won'}
+          title={status === 'won' ? 'YOU ESCAPED WITH CHEESE!' : 'CAUGHT BY TOM!'}
           score={score}
           highScore={highScore}
           isNewHighScore={score >= highScore && score > 0}

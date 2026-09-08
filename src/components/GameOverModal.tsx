@@ -1,27 +1,19 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import {
   Modal,
   Pressable,
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
+  Animated,
 } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  withTiming,
-  Easing,
-} from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, glassmorphism, elegantShadow } from '../theme/colors';
+import { BaseModal, BaseModalProps, BaseModalState } from './BaseComponent';
+import { Colors, elegantShadow } from '../theme/colors';
 import { Fonts, FontSize } from '../theme/typography';
 import { Spacing, Radius } from '../theme/spacing';
 
-interface GameOverModalProps {
-  visible: boolean;
-  title?: string;
+export interface GameOverModalProps extends BaseModalProps {
   score: number | string;
   highScore?: number | string;
   isNewHighScore?: boolean;
@@ -31,127 +23,167 @@ interface GameOverModalProps {
   stats?: { label: string; value: string | number }[];
 }
 
-export const GameOverModal: React.FC<GameOverModalProps> = ({
-  visible,
-  title = "GAME OVER",
-  score,
-  highScore,
-  isNewHighScore = false,
-  accentColor = Colors.accent.primary,
-  onRestart,
-  onHome,
-  stats,
-}) => {
-  const scale = useSharedValue(0.8);
-  const opacity = useSharedValue(0);
+export interface GameOverModalState extends BaseModalState {}
 
-  const { width: windowWidth } = useWindowDimensions();
-  const isMobile = windowWidth < 480;
-  const modalMaxWidth = isMobile ? windowWidth - 40 : 420;
+/**
+ * GameOverModal Component
+ * Implements OOP BaseModal with encapsulated animation state, responsive modal layout,
+ * and polymorphic dialog rendering.
+ */
+export class GameOverModal extends BaseModal<GameOverModalProps, GameOverModalState> {
+  private opacityAnim: Animated.Value;
+  private scaleAnim: Animated.Value;
 
-  useEffect(() => {
+  constructor(props: GameOverModalProps) {
+    super(props);
+    this.opacityAnim = new Animated.Value(props.visible ? 1 : 0);
+    this.scaleAnim = new Animated.Value(props.visible ? 1 : 0.8);
+  }
+
+  protected override onVisibilityChanged(visible: boolean): void {
+    super.onVisibilityChanged(visible);
     if (visible) {
-      opacity.value = withTiming(1, { duration: 300, easing: Easing.out(Easing.ease) });
-      scale.value = withSpring(1, { damping: 15, stiffness: 150 });
+      Animated.parallel([
+        Animated.timing(this.opacityAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.spring(this.scaleAnim, {
+          toValue: 1,
+          friction: 6,
+          tension: 80,
+          useNativeDriver: true,
+        }),
+      ]).start();
     } else {
-      opacity.value = withTiming(0, { duration: 200 });
-      scale.value = withTiming(0.8, { duration: 200 });
+      Animated.parallel([
+        Animated.timing(this.opacityAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(this.scaleAnim, {
+          toValue: 0.8,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
     }
-  }, [visible]);
+  }
 
-  const overlayStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-  }));
+  public renderContent(): React.ReactNode {
+    const {
+      visible,
+      title = 'GAME OVER',
+      score,
+      highScore,
+      isNewHighScore = false,
+      accentColor = Colors.accent.primary,
+      onRestart,
+      onHome,
+      stats,
+    } = this.props;
 
-  const modalStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-    opacity: opacity.value,
-  }));
+    if (!visible) return null;
 
-  if (!visible) return null;
+    const isMobile = this.isMobile();
+    const modalMaxWidth = isMobile ? this.getWindowWidth() - 40 : 420;
 
-  return (
-    <Modal visible={visible} transparent animationType="none">
-      <Animated.View style={[styles.overlay, overlayStyle]}>
-        
-        <Animated.View style={[
-          styles.modalContent, 
-          modalStyle, 
-          { 
-            maxWidth: modalMaxWidth,
-            borderLeftWidth: 4,
-            borderLeftColor: accentColor,
-            borderWidth: 1,
-            borderColor: `${accentColor}4D`,
-            shadowColor: accentColor,
-            shadowOpacity: 0.3,
-            shadowRadius: 20,
-            elevation: 10,
-          }
-        ]}>
-          
-          <Text style={[styles.title, { color: accentColor }]}>{title}</Text>
-          
-          <View style={styles.scoreSection}>
-            <Text style={styles.scoreLabel}>FINAL SCORE</Text>
-            <Text style={[styles.scoreValue, { fontSize: isMobile ? FontSize['3xl'] : FontSize['5xl'] }]}>{score}</Text>
-            
-            {isNewHighScore && (
-              <View style={[styles.newRecordBadge, { backgroundColor: Colors.accent.warning }]}>
-                <Text style={styles.newRecordText}>NEW RECORD!</Text>
-              </View>
-            )}
-          </View>
+    return (
+      <Modal visible={visible} transparent animationType="none">
+        <Animated.View style={[styles.overlay, { opacity: this.opacityAnim }]}>
+          <Animated.View
+            style={[
+              styles.modalContent,
+              {
+                transform: [{ scale: this.scaleAnim }],
+                maxWidth: modalMaxWidth,
+                borderLeftWidth: 4,
+                borderLeftColor: accentColor,
+                borderWidth: 1,
+                borderColor: `${accentColor}4D`,
+                shadowColor: accentColor,
+                shadowOpacity: 0.3,
+                shadowRadius: 20,
+                elevation: 10,
+              },
+            ]}
+          >
+            <Text style={[styles.title, { color: accentColor }]}>{title}</Text>
 
-          {(highScore !== undefined || stats) && (
-            <View style={styles.statsGrid}>
-              {highScore !== undefined && (
-                <View style={styles.statItem}>
-                  <Text style={styles.statLabel}>BEST SCORE</Text>
-                  <Text style={styles.statValue}>{highScore}</Text>
+            <View style={styles.scoreSection}>
+              <Text style={styles.scoreLabel}>FINAL SCORE</Text>
+              <Text
+                style={[
+                  styles.scoreValue,
+                  { fontSize: isMobile ? FontSize['3xl'] : FontSize['5xl'] },
+                ]}
+              >
+                {score}
+              </Text>
+
+              {isNewHighScore && (
+                <View style={[styles.newRecordBadge, { backgroundColor: Colors.accent.warning }]}>
+                  <Text style={styles.newRecordText}>NEW RECORD!</Text>
                 </View>
               )}
-              {stats?.map((stat, i) => (
-                <View key={i} style={styles.statItem}>
-                  <Text style={styles.statLabel}>{stat.label}</Text>
-                  <Text style={styles.statValue}>{stat.value}</Text>
-                </View>
-              ))}
             </View>
-          )}
 
-          <View style={[styles.actions, { flexDirection: isMobile ? 'column' : 'row' }]}>
-            <Pressable
-              onPress={onHome}
-              style={({ pressed }) => [
-                styles.button,
-                styles.homeButton,
-                { opacity: pressed ? 0.7 : 1 }
-              ]}
-            >
-              <Ionicons name="home-outline" size={20} color={Colors.text.primary} />
-              <Text style={styles.homeButtonText}>HOME</Text>
-            </Pressable>
+            {(highScore !== undefined || stats) && (
+              <View style={styles.statsGrid}>
+                {highScore !== undefined && (
+                  <View style={styles.statItem}>
+                    <Text style={styles.statLabel}>BEST SCORE</Text>
+                    <Text style={styles.statValue}>{highScore}</Text>
+                  </View>
+                )}
+                {stats?.map((stat, i) => (
+                  <View key={i} style={styles.statItem}>
+                    <Text style={styles.statLabel}>{stat.label}</Text>
+                    <Text style={styles.statValue}>{stat.value}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
 
-            <Pressable
-              onPress={onRestart}
-              style={({ pressed }) => [
-                styles.button,
-                styles.restartButton,
-                { backgroundColor: accentColor, shadowColor: accentColor, opacity: pressed ? 0.7 : 1 }
-              ]}
-            >
-              <Ionicons name="refresh" size={20} color={Colors.bg.primary} />
-              <Text style={[styles.restartButtonText, { color: Colors.bg.primary }]}>PLAY AGAIN</Text>
-            </Pressable>
-          </View>
+            <View style={[styles.actions, { flexDirection: isMobile ? 'column' : 'row' }]}>
+              <Pressable
+                onPress={onHome}
+                style={({ pressed }) => [
+                  styles.button,
+                  styles.homeButton,
+                  { opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                <Ionicons name="home-outline" size={20} color={Colors.text.primary} />
+                <Text style={styles.homeButtonText}>HOME</Text>
+              </Pressable>
 
+              <Pressable
+                onPress={onRestart}
+                style={({ pressed }) => [
+                  styles.button,
+                  styles.restartButton,
+                  {
+                    backgroundColor: accentColor,
+                    shadowColor: accentColor,
+                    opacity: pressed ? 0.7 : 1,
+                  },
+                ]}
+              >
+                <Ionicons name="refresh" size={20} color={Colors.bg.primary} />
+                <Text style={[styles.restartButtonText, { color: Colors.bg.primary }]}>
+                  PLAY AGAIN
+                </Text>
+              </Pressable>
+            </View>
+          </Animated.View>
         </Animated.View>
-
-      </Animated.View>
-    </Modal>
-  );
-};
+      </Modal>
+    );
+  }
+}
 
 const styles = StyleSheet.create({
   overlay: {

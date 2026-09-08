@@ -493,9 +493,10 @@ const ObstacleLayer = ({ type, slot, runFrameSV }: { type: number, slot: any, ru
     );
 };
 
+import { useEngine, DinoEngine } from '../src/engines';
+
 export default function DinoJump() {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  
   const GAME_WIDTH = windowWidth;
   const GAME_HEIGHT = windowHeight;
 
@@ -505,6 +506,7 @@ export default function DinoJump() {
   const runFrame = useSharedValue(0);
   const isDucking = useSharedValue(0);
   
+  const [dinoEngineState, engine] = useEngine(() => new DinoEngine());
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
   const [gameOver, setGameOver] = useState(false);

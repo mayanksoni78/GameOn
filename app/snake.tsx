@@ -412,45 +412,39 @@ const Particle = ({ x, y, color }: { x: number; y: number; color: string }) => {
   );
 };
 
+import { useEngine, SnakeEngine } from '../src/engines';
+
 export default function Snake() {
   const [boardWidth, setBoardWidth] = useState(0);
   const [cellSize, setCellSize] = useState(0);
 
-  const [snake, setSnake] = useState<Coordinate[]>([{ x: 10, y: 10 }]);
-  const [food, setFood] = useState<Coordinate>({ x: 5, y: 5 });
-  const [foodType, setFoodType] = useState(0);
-  const [direction, setDirection] = useState<Direction>('RIGHT');
-  const [isGameOver, setIsGameOver] = useState(false);
-  const [gameStarted, setGameStarted] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
   const [difficulty, setDifficulty] = useState<Difficulty>('MEDIUM');
-  const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(0);
-  const [isEating, setIsEating] = useState(false);
+  const [gameState, engine] = useEngine(() => new SnakeEngine(GRID_SIZE, GRID_SIZE));
+  const { snake, food, foodType, direction, score, highScore, gameOver: isGameOver, gameStarted, isPaused, isEating } = gameState;
 
   const [particles, setParticles] = useState<{ id: number; x: number; y: number; color: string }[]>([]);
   const particleIdRef = useRef(0);
 
-  const directionRef = useRef(direction);
-  const snakeRef = useRef(snake);
-  const isGameOverRef = useRef(isGameOver);
-  const gameStartedRef = useRef(gameStarted);
-  const isPausedRef = useRef(isPaused);
-
   const foodScale = useSharedValue(1);
   const foodFloat = useSharedValue(0);
-
-  useEffect(() => {
-    directionRef.current = direction;
-    snakeRef.current = snake;
-    isGameOverRef.current = isGameOver;
-    gameStartedRef.current = gameStarted;
-    isPausedRef.current = isPaused;
-  }, [direction, snake, isGameOver, gameStarted, isPaused]);
+  const engineRef = useRef(engine);
+  engineRef.current = engine;
+  const cellSizeRef = useRef(cellSize);
+  cellSizeRef.current = cellSize;
 
   useEffect(() => {
     AsyncStorage.getItem('snake_highscore').then((val) => {
-      if (val) setHighScore(parseInt(val));
+      if (val) {
+        const stored = parseInt(val);
+        if (stored > engine.getHighScore()) {
+          engine.setHighScore(stored);
+        }
+      }
+    });
+
+    engine.setOnEat((foodPt, fType) => {
+      spawnParticles(foodPt.x * cellSizeRef.current + cellSizeRef.current / 2, foodPt.y * cellSizeRef.current + cellSizeRef.current / 2, FRUITS[fType].color);
+      notifySuccess();
     });
 
     const hPad = 32;
@@ -476,55 +470,6 @@ export default function Snake() {
     );
   }, []);
 
-  const moveSnake = useCallback(() => {
-    if (isGameOverRef.current || !gameStartedRef.current || isPausedRef.current) return;
-
-    const currentHead = snakeRef.current[0];
-    const newHead = { ...currentHead };
-
-    switch (directionRef.current) {
-      case 'UP': newHead.y -= 1; break;
-      case 'DOWN': newHead.y += 1; break;
-      case 'LEFT': newHead.x -= 1; break;
-      case 'RIGHT': newHead.x += 1; break;
-    }
-
-    if (
-      newHead.x < 0 || newHead.x >= GRID_SIZE || newHead.y < 0 || newHead.y >= GRID_SIZE ||
-      snakeRef.current.some((segment, index) => index !== snakeRef.current.length - 1 && segment.x === newHead.x && segment.y === newHead.y)
-    ) {
-      handleGameOver();
-      return;
-    }
-
-    const newSnake = [newHead, ...snakeRef.current];
-
-    if (newHead.x === food.x && newHead.y === food.y) {
-      setIsEating(true);
-      setTimeout(() => setIsEating(false), SPEED_MAP[difficulty]);
-
-      spawnParticles(food.x * cellSize + cellSize / 2, food.y * cellSize + cellSize / 2, FRUITS[foodType].color);
-
-      setScore((s) => s + FRUITS[foodType].points);
-      notifySuccess();
-
-      let newFood: Coordinate;
-      while (true) {
-        newFood = {
-          x: Math.floor(Math.random() * GRID_SIZE),
-          y: Math.floor(Math.random() * GRID_SIZE),
-        };
-        if (!newSnake.some((s) => s.x === newFood.x && s.y === newFood.y)) break;
-      }
-      setFood(newFood);
-      setFoodType(Math.floor(Math.random() * FRUITS.length));
-    } else {
-      newSnake.pop();
-    }
-
-    setSnake(newSnake);
-  }, [food, difficulty, cellSize, foodType]);
-
   const spawnParticles = (x: number, y: number, color: string) => {
     const newParticles = Array.from({ length: 12 }).map((_, i) => ({
       id: particleIdRef.current++,
@@ -536,56 +481,38 @@ export default function Snake() {
   };
 
   useEffect(() => {
-    if (!gameStarted || isPaused) return;
-    const interval = setInterval(moveSnake, SPEED_MAP[difficulty]);
+    if (!gameStarted || isPaused || isGameOver) return;
+    const interval = setInterval(() => {
+      const moved = engineRef.current.tick();
+      if (!moved && engineRef.current.getState().gameOver) {
+        notifyError();
+        const currentScore = engineRef.current.getScore();
+        if (currentScore > engineRef.current.getHighScore()) {
+          AsyncStorage.setItem('snake_highscore', currentScore.toString());
+        }
+      }
+    }, SPEED_MAP[difficulty]);
     return () => clearInterval(interval);
-  }, [moveSnake, gameStarted, difficulty, isPaused]);
-
-  const handleGameOver = () => {
-    setIsGameOver(true);
-    setGameStarted(false);
-    setIsPaused(false);
-    notifyError();
-    if (score > highScore) {
-      setHighScore(score);
-      AsyncStorage.setItem('snake_highscore', score.toString());
-    }
-  };
+  }, [gameStarted, difficulty, isPaused, isGameOver]);
 
   const restartGame = () => {
     tapMedium();
-    setSnake([{ x: Math.floor(GRID_SIZE / 2), y: Math.floor(GRID_SIZE / 2) }]);
-    setDirection('RIGHT');
-    setScore(0);
-    setIsGameOver(false);
-    setGameStarted(false);
-    setIsPaused(false);
+    engine.reset();
     setParticles([]);
   };
 
   const togglePause = () => {
-    if (!gameStartedRef.current && !isPausedRef.current) return;
     tapLight();
-    setIsPaused(prev => !prev);
+    engine.togglePause();
   };
 
   const startGame = () => {
     tapLight();
-    if (!gameStartedRef.current) {
-      setGameStarted(true);
-      setIsPaused(false);
-    }
+    engine.startGame();
   };
 
   const handleDirectionChange = (newDir: Direction) => {
-    if (isPausedRef.current || !gameStartedRef.current) return;
-    const current = directionRef.current;
-    if (
-      (newDir === 'UP' && current !== 'DOWN') || (newDir === 'DOWN' && current !== 'UP') ||
-      (newDir === 'LEFT' && current !== 'RIGHT') || (newDir === 'RIGHT' && current !== 'LEFT')
-    ) {
-      setDirection(newDir);
-    }
+    engine.setDirection(newDir);
   };
 
   useKeyboard((key: KeyboardKey) => {

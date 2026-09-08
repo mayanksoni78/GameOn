@@ -207,6 +207,8 @@ AnimatedPipe.displayName = 'AnimatedPipe';
 
 type Particle = { id: number; x: number; y: number; vx: number; vy: number; life: number; color: string };
 
+import { useEngine, FlappyBirdEngine } from '../src/engines';
+
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function FlappyBird() {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -234,6 +236,7 @@ export default function FlappyBird() {
   
   const BIRD_X_POS = Math.floor(Math.min(GAME_WIDTH / 4, 300)); // Cap bird position nicely
 
+  const [flappyState, engine] = useEngine(() => new FlappyBirdEngine());
   const [score, setScore]             = useState(0);
   const [highScore, setHighScore]     = useState(0);
   const [gameOver, setGameOver]       = useState(false);

@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -14,28 +14,10 @@ import { Fonts, FontSize } from '../src/theme/typography';
 import { Spacing } from '../src/theme/spacing';
 import { CyberBackground } from '../src/components/CyberBackground';
 import { PremiumGameCard } from '../src/components/PremiumGameCard';
-import { IconId } from '../src/components/PremiumIcon';
-
-const GAMES: {
-  id: IconId;
-  title: string;
-  subtitle: string;
-  route: Href;
-  accent: string;
-}[] = [
-  { id: 'snake',      title: 'Snake',      subtitle: 'Classic directional eating game.',   route: '/snake',       accent: '#00E676' },
-  { id: 'tetris',     title: 'Tetris',     subtitle: 'Block puzzle masterpiece.',          route: '/tetris',      accent: '#B300FF' },
-  { id: '2048',       title: '2048',       subtitle: 'Combine tiles to reach 2048.',       route: '/game2048',    accent: '#FFB300' },
-  { id: 'tictactoe',  title: 'Tic Tac',   subtitle: 'Strategic X and O battles.',         route: '/tictactoe',   accent: '#00E5FF' },
-  { id: 'flappybird', title: 'Flappy',     subtitle: 'Navigate through the obstacles.',    route: '/flappybird',  accent: '#FF4081' },
-  { id: 'connect4',   title: 'Connect 4',  subtitle: 'Drop pieces to form a line of 4.',  route: '/connect4',    accent: '#FF3D71' },
-  { id: 'bingo',      title: 'Tom & Jerry',subtitle: 'Collect cheese, dodge Tom!',         route: '/tomandjerry', accent: '#3DD6D0' },
-  { id: 'sudoku',     title: 'Sudoku',     subtitle: 'Classic logic-based number puzzle.', route: '/sudoku',      accent: '#2979FF' },
-  { id: 'dinojump',   title: 'Dino Jump',  subtitle: 'Endless runner survival.',           route: '/dinojump',    accent: '#69FF47' },
-  { id: 'blockoduko', title: 'Block',      subtitle: 'Wood block puzzle logic.',           route: '/blockoduko',  accent: '#7C3AED' },
-];
+import { GameCatalogService } from '../src/services/GameCatalogService';
 
 export default function Home() {
+  const games = useMemo(() => GameCatalogService.getInstance().getAllGames(), []);
   const { width } = useWindowDimensions();
 
   // Responsive column logic
@@ -77,7 +59,7 @@ export default function Home() {
 
           {/* Responsive grid */}
           <View style={[styles.grid, { gap: GUTTER }]}>
-            {GAMES.map((game, index) => (
+            {games.map((game, index) => (
               <PremiumGameCard
                 key={game.id}
                 id={game.id}

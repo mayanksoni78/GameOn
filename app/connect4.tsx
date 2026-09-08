@@ -35,102 +35,8 @@ type Board      = (Player | null)[][];
 type GameMode   = 'PvP' | 'PvE';
 type Difficulty = 'EASY' | 'MEDIUM' | 'HARD';
 
-const makeBoard = (): Board => Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+import { useEngine, Connect4Engine, Connect4Player, Connect4Cell } from '../src/engines';
 
-// ── Win check with line ───────────────────────────────────────────────────────
-function checkWinner(b: Board): { winner: Player | 'Draw'; line: [number,number][] } | null {
-  const dirs = [[0,1],[1,0],[1,1],[1,-1]];
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      if (!b[r][c]) continue;
-      for (const [dr,dc] of dirs) {
-        const cells: [number,number][] = [];
-        let ok = true;
-        for (let k = 0; k < 4; k++) {
-          const nr = r + dr*k, nc = c + dc*k;
-          if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS || b[nr][nc] !== b[r][c]) { ok = false; break; }
-          cells.push([nr, nc]);
-        }
-        if (ok) return { winner: b[r][c]!, line: cells };
-      }
-    }
-  }
-  if (b[0].every(c => c !== null)) return { winner: 'Draw', line: [] };
-  return null;
-}
-
-// ── AI ────────────────────────────────────────────────────────────────────────
-function getValidCols(b: Board): number[] {
-  const v: number[] = [];
-  for (let c = 0; c < COLS; c++) if (!b[0][c]) v.push(c);
-  return v;
-}
-
-function getOpenRow(b: Board, c: number): number {
-  for (let r = ROWS - 1; r >= 0; r--) if (!b[r][c]) return r;
-  return -1;
-}
-
-function evalWindow(w: (Player|null)[], p: Player): number {
-  const opp: Player = p === 1 ? 2 : 1;
-  let pc = 0, ec = 0, oc = 0;
-  for (const c of w) { if (c === p) pc++; else if (!c) ec++; else oc++; }
-  if (pc === 4) return 100;
-  if (pc === 3 && ec === 1) return 5;
-  if (pc === 2 && ec === 2) return 2;
-  if (oc === 3 && ec === 1) return -4;
-  return 0;
-}
-
-function scoreBoard(b: Board, p: Player): number {
-  let s = 0;
-  // Center
-  for (let r = 0; r < ROWS; r++) if (b[r][3] === p) s += 3;
-  // Horizontal
-  for (let r = 0; r < ROWS; r++) for (let c = 0; c <= COLS-4; c++) s += evalWindow([b[r][c],b[r][c+1],b[r][c+2],b[r][c+3]], p);
-  // Vertical
-  for (let c = 0; c < COLS; c++) for (let r = 0; r <= ROWS-4; r++) s += evalWindow([b[r][c],b[r+1][c],b[r+2][c],b[r+3][c]], p);
-  // Diag ↘
-  for (let r = 0; r <= ROWS-4; r++) for (let c = 0; c <= COLS-4; c++) s += evalWindow([b[r][c],b[r+1][c+1],b[r+2][c+2],b[r+3][c+3]], p);
-  // Diag ↗
-  for (let r = 3; r < ROWS; r++) for (let c = 0; c <= COLS-4; c++) s += evalWindow([b[r][c],b[r-1][c+1],b[r-2][c+2],b[r-3][c+3]], p);
-  return s;
-}
-
-function minimaxAB(b: Board, depth: number, alpha: number, beta: number, isMax: boolean): { col: number; score: number } {
-  const valid = getValidCols(b);
-  const w = checkWinner(b);
-  if (w?.winner === 2) return { col: -1, score: 1000000 };
-  if (w?.winner === 1) return { col: -1, score: -1000000 };
-  if (w?.winner === 'Draw' || valid.length === 0) return { col: -1, score: 0 };
-  if (depth === 0) return { col: -1, score: scoreBoard(b, 2) };
-
-  if (isMax) {
-    let best = -Infinity, bestCol = valid[0];
-    for (const c of valid) {
-      const r = getOpenRow(b, c);
-      const copy = b.map(row => [...row]);
-      copy[r][c] = 2;
-      const s = minimaxAB(copy, depth-1, alpha, beta, false).score;
-      if (s > best) { best = s; bestCol = c; }
-      alpha = Math.max(alpha, best);
-      if (alpha >= beta) break;
-    }
-    return { col: bestCol, score: best };
-  } else {
-    let best = Infinity, bestCol = valid[0];
-    for (const c of valid) {
-      const r = getOpenRow(b, c);
-      const copy = b.map(row => [...row]);
-      copy[r][c] = 1;
-      const s = minimaxAB(copy, depth-1, alpha, beta, true).score;
-      if (s < best) { best = s; bestCol = c; }
-      beta = Math.min(beta, best);
-      if (alpha >= beta) break;
-    }
-    return { col: bestCol, score: best };
-  }
-}
 
 // ── Animated Disc ─────────────────────────────────────────────────────────────
 const AnimatedDisc = ({ player, isWinCell }: { player: Player | null; isWinCell: boolean }) => {
@@ -214,149 +120,65 @@ function Seg<T extends string>({ options, labels, value, onChange, color }: {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function Connect4() {
-  const [mode, setMode]             = useState<GameMode>('PvP');
-  const [difficulty, setDifficulty] = useState<Difficulty>('MEDIUM');
-  const [board, setBoard]           = useState<Board>(makeBoard());
-  const [currentPlayer, setCurrent] = useState<Player>(1);
-  const [winResult, setWinResult]   = useState<{ winner: Player | 'Draw'; line: [number,number][] } | null>(null);
-  const [gameOver, setGameOver]     = useState(false);
-  const [scoreP1, setScoreP1]       = useState(0);
-  const [scoreP2, setScoreP2]       = useState(0);
-  const [aiThink, setAiThink]       = useState(false);
-  const [resultTitle, setResultTitle] = useState('');
-  const [resultAccent, setResultAccent] = useState<string>(ACCENT);
+  const [gameState, engine] = useEngine(() => new Connect4Engine());
 
-  const boardRef   = useRef(board);
-  const currentRef = useRef(currentPlayer);
-  useEffect(() => { boardRef.current = board; }, [board]);
-  useEffect(() => { currentRef.current = currentPlayer; }, [currentPlayer]);
+  const {
+    board,
+    currentPlayer,
+    winner,
+    isDraw,
+    winningPositions,
+    p1Score,
+    p2Score,
+    gameMode,
+    difficulty,
+  } = gameState;
 
-  // Reset on mode/difficulty change
-  useEffect(() => {
-    const b = makeBoard();
-    boardRef.current = b;
-    setBoard(b);
-    setCurrent(1);
-    setWinResult(null);
-    setGameOver(false);
-    setAiThink(false);
-    setResultTitle('');
-  }, [mode, difficulty]);
+  const gameOver = engine.isGameOver();
 
-  const resetBoard = useCallback(() => {
+  const resetBoard = () => {
     tapMedium();
-    const b = makeBoard();
-    boardRef.current = b;
-    setBoard(b);
-    setCurrent(1);
-    setWinResult(null);
-    setGameOver(false);
-    setAiThink(false);
-    setResultTitle('');
-  }, []);
-
-  const fullReset = useCallback(() => {
-    resetBoard();
-    setScoreP1(0);
-    setScoreP2(0);
-  }, [resetBoard]);
-
-  // Resolve after placing a disc
-  const resolve = (newBoard: Board, player: Player, currentMode: GameMode): boolean => {
-    const w = checkWinner(newBoard);
-    if (w) {
-      setWinResult(w);
-      setGameOver(true);
-      if (w.winner === 'Draw') {
-        setResultTitle("IT'S A DRAW!");
-        setResultAccent(Colors.text.muted);
-        notifyError();
-      } else if (w.winner === 1) {
-        setScoreP1(s => s + 1);
-        setResultTitle(currentMode === 'PvE' ? 'YOU WIN!' : 'PLAYER 1 WINS!');
-        setResultAccent(P1_COLOR);
-        notifySuccess();
-      } else {
-        setScoreP2(s => s + 1);
-        setResultTitle(currentMode === 'PvE' ? 'CPU WINS!' : 'PLAYER 2 WINS!');
-        setResultAccent(P2_COLOR);
-        if (currentMode === 'PvE') notifyError(); else notifySuccess();
-      }
-      return true;
-    }
-    return false;
+    engine.reset();
   };
 
-  // Human drop
-  const handleDrop = (col: number) => {
-    if (gameOver || aiThink) return;
-    if (mode === 'PvE' && currentPlayer === 2) return;
+  const fullReset = () => {
+    engine.reset();
+  };
 
-    const row = getOpenRow(board, col);
-    if (row === -1) return;
+  const handleDrop = (col: number) => {
+    if (gameOver) return;
+    if (gameMode === 'PvE' && currentPlayer === 2) return;
 
     tapLight();
-    const newBoard = board.map(r => [...r]);
-    newBoard[row][col] = currentPlayer;
-    boardRef.current = newBoard;
-    setBoard(newBoard);
-
-    if (!resolve(newBoard, currentPlayer, mode)) {
-      setCurrent(currentPlayer === 1 ? 2 : 1);
+    const dropped = engine.dropPiece(col);
+    if (dropped) {
+      if (engine.getState().winner) {
+        notifySuccess();
+      } else if (engine.getState().isDraw) {
+        notifyError();
+      }
     }
   };
-
-  // AI turn
-  useEffect(() => {
-    if (mode !== 'PvE' || currentPlayer !== 2 || gameOver) return;
-
-    setAiThink(true);
-    const delay = difficulty === 'EASY' ? 500 : difficulty === 'MEDIUM' ? 700 : 900;
-
-    const timer = setTimeout(() => {
-      const b = boardRef.current;
-      const valid = getValidCols(b);
-      if (valid.length === 0) { setAiThink(false); return; }
-
-      let col: number;
-      if (difficulty === 'EASY') {
-        col = valid[Math.floor(Math.random() * valid.length)];
-      } else if (difficulty === 'MEDIUM') {
-        col = minimaxAB(b.map(r => [...r]), 2, -Infinity, Infinity, true).col;
-      } else {
-        col = minimaxAB(b.map(r => [...r]), 4, -Infinity, Infinity, true).col;
-      }
-
-      const row = getOpenRow(b, col);
-      if (row === -1) { setAiThink(false); return; }
-
-      const newBoard = b.map(r => [...r]);
-      newBoard[row][col] = 2;
-      boardRef.current = newBoard;
-      setAiThink(false);
-      setBoard(newBoard);
-
-      if (!resolve(newBoard, 2, 'PvE')) {
-        setCurrent(1);
-      }
-    }, delay);
-
-    return () => clearTimeout(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPlayer, mode, gameOver, difficulty]);
 
   // Winning cells set
   const winCells = new Set<string>();
-  if (winResult?.line) {
-    for (const [r,c] of winResult.line) winCells.add(`${r}-${c}`);
+  for (const pos of winningPositions) {
+    winCells.add(`${pos.row}-${pos.col}`);
   }
 
   const turnColor = currentPlayer === 1 ? P1_COLOR : P2_COLOR;
+  const resultTitle = winner
+    ? gameMode === 'PvE'
+      ? winner === 1 ? 'YOU WIN!' : 'CPU WINS!'
+      : `PLAYER ${winner} WINS!`
+    : isDraw
+      ? "IT'S A DRAW!"
+      : '';
+
   const turnLabel = gameOver
     ? resultTitle
-    : aiThink
-      ? 'AI THINKING...'
-      : `${mode === 'PvE' && currentPlayer === 1 ? 'YOUR' : `P${currentPlayer}'S`} TURN`;
+    : `${gameMode === 'PvE' && currentPlayer === 1 ? 'YOUR' : `P${currentPlayer}'S`} TURN`;
+
 
   return (
     <View style={styles.root}>
@@ -365,10 +187,10 @@ export default function Connect4() {
 
         <GameHeader
           title="CONNECT 4"
-          score={scoreP1}
-          scoreLabel={mode === 'PvE' ? 'YOU (P1)' : 'PLAYER 1'}
-          highScore={scoreP2}
-          highScoreLabel={mode === 'PvE' ? `CPU` : 'PLAYER 2'}
+          score={p1Score}
+          scoreLabel={gameMode === 'PvE' ? 'YOU (P1)' : 'PLAYER 1'}
+          highScore={p2Score}
+          highScoreLabel={gameMode === 'PvE' ? `CPU` : 'PLAYER 2'}
           accentColor={ACCENT}
           onBack={() => router.replace('/')}
           rightContent={
@@ -393,18 +215,16 @@ export default function Connect4() {
           <View style={[styles.settingsPanel, glassmorphism()]}>
             <View style={styles.settingGroup}>
               <Text style={styles.settingLabel}>GAME MODE</Text>
-              <Seg options={['PvP','PvE'] as GameMode[]} labels={['👤 1v1','🤖 1v CPU']} value={mode} onChange={setMode} color={ACCENT} />
+              <Seg options={['PvP','PvE'] as GameMode[]} labels={['👤 1v1','🤖 1v CPU']} value={gameMode} onChange={m => engine.setGameMode(m)} color={ACCENT} />
             </View>
             
-            {mode === 'PvE' && (
+            {gameMode === 'PvE' && (
               <View style={[styles.settingGroup, { marginTop: Spacing[4] }]}>
                 <Text style={styles.settingLabel}>CPU DIFFICULTY</Text>
-                <Seg options={['EASY','MEDIUM','HARD'] as Difficulty[]} labels={['EASY','MEDIUM','HARD']} value={difficulty} onChange={setDifficulty} color={ACCENT} />
+                <Seg options={['EASY','MEDIUM','HARD'] as Difficulty[]} labels={['EASY','MEDIUM','HARD']} value={difficulty} onChange={d => engine.setDifficulty(d)} color={ACCENT} />
               </View>
             )}
           </View>
-
-          {/* Scoreboard moved to GameHeader */}
 
           {/* ── Turn Indicator ─── */}
           <View style={styles.turnRow}>
@@ -420,13 +240,13 @@ export default function Connect4() {
                   key={c}
                   style={styles.column}
                   onPress={() => handleDrop(c)}
-                  disabled={gameOver || aiThink || (mode === 'PvE' && currentPlayer === 2)}
+                  disabled={gameOver || (gameMode === 'PvE' && currentPlayer === 2)}
                   activeOpacity={0.85}
                 >
                   {board.map((row, r) => (
                     <View key={`${r}-${c}`} style={styles.cellOuter}>
                       <View style={[styles.cellHole, winCells.has(`${r}-${c}`) && { borderColor: '#FFD70080' }]}>
-                        <AnimatedDisc player={row[c]} isWinCell={winCells.has(`${r}-${c}`)} />
+                        <AnimatedDisc player={row[c] === 0 ? null : (row[c] as Player)} isWinCell={winCells.has(`${r}-${c}`)} />
                       </View>
                     </View>
                   ))}
@@ -445,8 +265,8 @@ export default function Connect4() {
         <GameOverModal
           visible={gameOver}
           title={resultTitle || 'GAME OVER'}
-          score={winResult?.winner === 'Draw' ? '—' : '+1'}
-          accentColor={resultAccent}
+          score={isDraw ? '—' : '+1'}
+          accentColor={turnColor}
           onRestart={resetBoard}
           onHome={() => { fullReset(); router.replace('/'); }}
         />
