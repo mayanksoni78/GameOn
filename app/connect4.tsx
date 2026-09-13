@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import Animated, {
@@ -16,7 +16,6 @@ import { Spacing, Radius } from '../src/theme/spacing';
 import { CyberBackground } from '../src/components/CyberBackground';
 import { GameHeader } from '../src/components/GameHeader';
 import { GameOverModal } from '../src/components/GameOverModal';
-import { screenWidth } from '../src/utils/dimensions';
 import { tapLight, tapMedium, notifySuccess, notifyError } from '../src/utils/haptics';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -26,9 +25,6 @@ const ACCENT     = '#00E5FF'; // Neon Cyan
 const P1_COLOR   = '#FF1744';  // Neon Red
 const P2_COLOR   = '#FFD600';  // Electric Yellow
 const BOARD_PAD  = 48;
-const MAX_BOARD  = Math.min(screenWidth - BOARD_PAD, 490);
-const CELL_SIZE  = Math.floor(MAX_BOARD / COLS);
-const DISC_SIZE  = CELL_SIZE - 10;
 
 type Player     = 1 | 2;
 type Board      = (Player | null)[][];
@@ -39,7 +35,7 @@ import { useEngine, Connect4Engine, Connect4Player, Connect4Cell } from '../src/
 
 
 // ── Animated Disc ─────────────────────────────────────────────────────────────
-const AnimatedDisc = ({ player, isWinCell }: { player: Player | null; isWinCell: boolean }) => {
+const AnimatedDisc = ({ player, isWinCell, discSize }: { player: Player | null; isWinCell: boolean; discSize: number }) => {
   const translateY = useSharedValue(-400);
   const glow = useSharedValue(0);
 
@@ -69,6 +65,8 @@ const AnimatedDisc = ({ player, isWinCell }: { player: Player | null; isWinCell:
 
   return (
     <Animated.View style={[styles.disc, dropStyle, glowStyle, {
+      width: discSize,
+      height: discSize,
       backgroundColor: color,
       shadowColor: color,
       shadowOffset: { width: 0, height: 2 },
@@ -121,6 +119,11 @@ function Seg<T extends string>({ options, labels, value, onChange, color }: {
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function Connect4() {
   const [gameState, engine] = useEngine(() => new Connect4Engine());
+  const { width } = useWindowDimensions();
+
+  const maxBoardWidth = Math.min(width - BOARD_PAD, 480);
+  const cellSize = Math.floor(maxBoardWidth / COLS);
+  const discSize = cellSize - 8;
 
   const {
     board,
@@ -142,7 +145,8 @@ export default function Connect4() {
   };
 
   const fullReset = () => {
-    engine.reset();
+    tapMedium();
+    engine.resetAll();
   };
 
   const handleDrop = (col: number) => {
@@ -182,11 +186,12 @@ export default function Connect4() {
 
   return (
     <View style={styles.root}>
-      <CyberBackground autoScroll />
+      <CyberBackground theme="connect4" />
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
 
         <GameHeader
           title="CONNECT 4"
+          category="BOARD"
           score={p1Score}
           scoreLabel={gameMode === 'PvE' ? 'YOU (P1)' : 'PLAYER 1'}
           highScore={p2Score}
@@ -238,15 +243,15 @@ export default function Connect4() {
               {Array.from({ length: COLS }).map((_, c) => (
                 <TouchableOpacity
                   key={c}
-                  style={styles.column}
+                  style={[styles.column, { width: cellSize }]}
                   onPress={() => handleDrop(c)}
                   disabled={gameOver || (gameMode === 'PvE' && currentPlayer === 2)}
                   activeOpacity={0.85}
                 >
                   {board.map((row, r) => (
-                    <View key={`${r}-${c}`} style={styles.cellOuter}>
+                    <View key={`${r}-${c}`} style={[styles.cellOuter, { width: cellSize, height: cellSize }]}>
                       <View style={[styles.cellHole, winCells.has(`${r}-${c}`) && { borderColor: '#FFD70080' }]}>
-                        <AnimatedDisc player={row[c] === 0 ? null : (row[c] as Player)} isWinCell={winCells.has(`${r}-${c}`)} />
+                        <AnimatedDisc player={row[c] === 0 ? null : (row[c] as Player)} isWinCell={winCells.has(`${r}-${c}`)} discSize={discSize} />
                       </View>
                     </View>
                   ))}
@@ -277,7 +282,7 @@ export default function Connect4() {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.bg.primary },
+  root: { flex: 1, backgroundColor: 'transparent' },
   safe: { flex: 1 },
   scrollContent: {
     alignItems: 'center',
@@ -291,10 +296,10 @@ const styles = StyleSheet.create({
   settingsPanel: {
     width: '100%',
     padding: Spacing[4],
-    borderRadius: Radius.lg,
-    backgroundColor: 'rgba(20, 10, 40, 0.65)',
+    borderRadius: 8,
+    backgroundColor: '#12111A',
     borderWidth: 1,
-    borderColor: `${ACCENT}40`,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   settingGroup: {
     width: '100%',
@@ -304,7 +309,7 @@ const styles = StyleSheet.create({
   settingLabel: {
     fontFamily: Fonts.heading,
     fontSize: FontSize.xs,
-    color: Colors.text.muted,
+    color: '#94A3B8',
     letterSpacing: 2,
     marginBottom: Spacing[1],
   },
@@ -315,17 +320,18 @@ const styles = StyleSheet.create({
     gap: Spacing[2],
   },
   segItem: {
-    paddingVertical: Spacing[3],
-    paddingHorizontal: Spacing[5],
+    paddingVertical: Spacing[2],
+    paddingHorizontal: Spacing[4],
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    borderRadius: Radius.full,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 4,
+    backgroundColor: '#161522',
   },
   segText: {
     fontFamily: Fonts.heading,
-    fontSize: FontSize.sm,
-    color: Colors.text.muted,
+    fontSize: FontSize.xs,
+    color: '#94A3B8',
     letterSpacing: 0.5,
   },
 
@@ -335,71 +341,63 @@ const styles = StyleSheet.create({
   scoreLabel: { fontFamily: Fonts.heading, fontSize: 9, marginBottom: 2, letterSpacing: 1 },
   scoreNum: { fontFamily: Fonts.heading, fontSize: FontSize['2xl'], textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 12 },
   midBtn: {
-    width: 46,
-    height: 46,
-    borderRadius: Radius.full,
+    width: 44,
+    height: 44,
+    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: `${ACCENT}80`,
-    backgroundColor: `${ACCENT}20`,
-    shadowColor: ACCENT,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 6,
-    elevation: 3,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: '#161522',
   },
   midBtnText: {
     fontFamily: Fonts.heading,
-    fontSize: FontSize.xl,
-    color: ACCENT,
-    textShadowColor: ACCENT,
-    textShadowRadius: 8,
+    fontSize: FontSize.lg,
+    color: '#F4F4F5',
   },
 
   // Turn
   turnRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing[2], height: 24 },
   turnDot: { width: 10, height: 10, borderRadius: 5 },
-  turnText: { fontFamily: Fonts.heading, fontSize: FontSize.sm, letterSpacing: 2, textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 8 },
+  turnText: { fontFamily: Fonts.heading, fontSize: FontSize.sm, letterSpacing: 2 },
 
   // Board
   boardFrame: {
     padding: Spacing[2],
-    borderRadius: Radius.lg,
-    borderWidth: 2,
-    borderColor: `${ACCENT}40`,
-    ...elegantShadow(0.5, 30, 15),
-    shadowColor: ACCENT,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.10)',
+    backgroundColor: '#12111A',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 4,
   },
   boardGrid: {
     flexDirection: 'row',
-    backgroundColor: '#0D1B4A',
-    borderRadius: Radius.md,
-    padding: 3,
+    backgroundColor: '#161522',
+    borderRadius: 6,
+    padding: 4,
     overflow: 'hidden',
   },
   column: {
-    width: CELL_SIZE,
     alignItems: 'center',
   },
   cellOuter: {
-    width: CELL_SIZE,
-    height: CELL_SIZE,
     padding: 3,
   },
   cellHole: {
     flex: 1,
     borderRadius: 100,
-    backgroundColor: 'rgba(0,0,0,0.75)',
+    backgroundColor: '#09080E',
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
   },
   disc: {
-    width: DISC_SIZE - 8,
-    height: DISC_SIZE - 8,
     borderRadius: 100,
     borderWidth: 2,
   },
@@ -407,23 +405,23 @@ const styles = StyleSheet.create({
   // Reset
   resetBtn: {
     paddingVertical: Spacing[3],
-    paddingHorizontal: Spacing[8],
-    borderRadius: Radius.full,
+    paddingHorizontal: Spacing[6],
+    borderRadius: 6,
+    backgroundColor: '#161522',
     borderWidth: 1,
-    borderColor: `${ACCENT}80`,
-    backgroundColor: `${ACCENT}20`,
-    shadowColor: ACCENT,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
     shadowRadius: 6,
     elevation: 3,
   },
   resetBtnText: {
     fontFamily: Fonts.heading,
-    fontSize: FontSize.xs,
+    fontSize: FontSize['2xs'],
     color: ACCENT,
     letterSpacing: 2,
     textShadowColor: ACCENT,
-    textShadowRadius: 8,
+    textShadowRadius: 6,
   },
 });

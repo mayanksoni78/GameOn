@@ -1,40 +1,38 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Platform, Dimensions,
+  View, Text, StyleSheet, TouchableOpacity, Platform, useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Colors, glassmorphism, elegantShadow } from '../src/theme/colors';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Colors, elegantShadow } from '../src/theme/colors';
 import { Fonts, FontSize } from '../src/theme/typography';
-import { Spacing, Radius } from '../src/theme/spacing';
+import { Spacing } from '../src/theme/spacing';
 import { GameHeader } from '../src/components/GameHeader';
 import { GameOverModal } from '../src/components/GameOverModal';
+import { CyberBackground } from '../src/components/CyberBackground';
 import { tapLight, tapMedium, notifySuccess, notifyError } from '../src/utils/haptics';
 import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, withSequence,
-  withRepeat, Easing, runOnJS,
+  withRepeat, Easing,
 } from 'react-native-reanimated';
-import { LinearGradient } from 'expo-linear-gradient';
-
-const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 // ── Theme (Elegant Deep Blue & Indigo) ─────────────────────────────────────────
 const MANSION = {
-  bg:         '#050610',
+  bg:         '#07050E',
   wallBase:   '#161A30',
   wallLight:  '#2C345C',
   wallDark:   '#080A12',
   wallCore:   '#1A1F3A',
-  floor:      '#0A0C18',
-  floorAlt:   '#0E1122',
-  accent:     '#D2B48C',   
+  floor:      '#07050E',
+  floorAlt:   '#0E091E',
+  accent:     '#00E5FF',   
   cheese:     '#FFD600',
   jerry:      '#8B4513',   
   tom:        '#778899',   
   tomBlue:    '#4682B4',   
   tomDark:    '#2F4F4F',   
-  moonlight:  'rgba(60, 90, 200, 0.08)',
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -52,9 +50,9 @@ interface DiffConfig {
 }
 
 const DIFFICULTIES: Record<Difficulty, DiffConfig> = {
-  EASY:   { label: 'Easy',   tomCount: 1, tomSpeed: 450, targetScore: 500,  color: MANSION.accent },
-  MEDIUM: { label: 'Medium', tomCount: 2, tomSpeed: 350, targetScore: 1000, color: MANSION.tomBlue },
-  HARD:   { label: 'Hard',   tomCount: 3, tomSpeed: 280, targetScore: 1500, color: '#6A5ACD' }, 
+  EASY:   { label: 'Easy',   tomCount: 1, tomSpeed: 450, targetScore: 500,  color: '#00E5FF' },
+  MEDIUM: { label: 'Medium', tomCount: 2, tomSpeed: 350, targetScore: 1000, color: '#38BDF8' },
+  HARD:   { label: 'Hard',   tomCount: 3, tomSpeed: 280, targetScore: 1500, color: '#A855F7' }, 
 };
 
 import { useEngine, TomAndJerryEngine, TomAndJerryDifficulty } from '../src/engines';
@@ -62,18 +60,6 @@ import { useEngine, TomAndJerryEngine, TomAndJerryDifficulty } from '../src/engi
 // ── Maze Config ───────────────────────────────────────────────────────────────
 const MAZE_ROWS = TomAndJerryEngine.ROWS;
 const MAZE_COLS = TomAndJerryEngine.COLS;
-
-const HEADER_HEIGHT = 160;
-const BOTTOM_HEIGHT = 80;
-const VIEWPORT_HEIGHT = screenHeight - HEADER_HEIGHT - BOTTOM_HEIGHT - 40;
-const VIEWPORT_WIDTH = screenWidth - 16;
-const CELL_SIZE = Math.min(
-  Math.floor(VIEWPORT_WIDTH / MAZE_COLS),
-  Math.floor(VIEWPORT_HEIGHT / MAZE_ROWS),
-  28
-);
-const MAZE_PX_W = CELL_SIZE * MAZE_COLS;
-const MAZE_PX_H = CELL_SIZE * MAZE_ROWS;
 
 // ── CSS Sprites ─────────────────────────────────────────────────────────────
 
@@ -196,54 +182,24 @@ const CheeseSprite = ({ size }: { size: number }) => {
 };
 
 
-// ── Background Component ──────────────────────────────────────────────
-const MansionBackground = React.memo(() => (
-  <View style={StyleSheet.absoluteFill}>
-    <LinearGradient
-      colors={['#050610', '#0B0D1E', '#10142B', '#050610']}
-      locations={[0, 0.3, 0.7, 1]}
-      style={StyleSheet.absoluteFill}
-    />
-    <View style={bgStyles.moonGlow} />
-    <View style={bgStyles.lightStreak1} />
-    <View style={bgStyles.lightStreak2} />
-    {Array.from({ length: 20 }).map((_, i) => (
-      <View key={`dust-${i}`} style={[bgStyles.dust, {
-        left: `${5 + Math.random() * 90}%` as any,
-        top: `${5 + Math.random() * 90}%` as any,
-        width: Math.random() * 2 + 1,
-        height: Math.random() * 2 + 1,
-        opacity: Math.random() * 0.1 + 0.05,
-      }]} />
-    ))}
-  </View>
-));
-
-const bgStyles = StyleSheet.create({
-  moonGlow: {
-    position: 'absolute', right: -40, top: -40,
-    width: 200, height: 200, borderRadius: 100,
-    backgroundColor: MANSION.moonlight,
-  },
-  lightStreak1: {
-    position: 'absolute', right: 30, top: 20,
-    width: 3, height: 120,
-    backgroundColor: 'rgba(60, 100, 255, 0.03)',
-    transform: [{ rotate: '25deg' }],
-  },
-  lightStreak2: {
-    position: 'absolute', right: 60, top: 10,
-    width: 2, height: 100,
-    backgroundColor: 'rgba(60, 100, 255, 0.02)',
-    transform: [{ rotate: '20deg' }],
-  },
-  dust: {
-    position: 'absolute', backgroundColor: '#A9B4C2', borderRadius: 4,
-  },
-});
-
 // ── Main Game Component ───────────────────────────────────────────────────────
 export default function JerryVsTomGame() {
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const isMobile = windowWidth < 600;
+
+  // Responsive cellSize calculation: ensure maze + HUD + mobile D-Pad fit cleanly on phone screen
+  const verticalReserved = isMobile ? 320 : 220;
+  const cellSize = Math.max(
+    13,
+    Math.min(
+      Math.floor((windowWidth - 20) / MAZE_COLS),
+      Math.floor((windowHeight - verticalReserved) / MAZE_ROWS),
+      28
+    )
+  );
+  const mazePxW = cellSize * MAZE_COLS;
+  const mazePxH = cellSize * MAZE_ROWS;
+
   const [gameState, engine] = useEngine(() => new TomAndJerryEngine());
   const {
     maze,
@@ -261,8 +217,8 @@ export default function JerryVsTomGame() {
   engineRef.current = engine;
   const isMovingRef = useRef(false);
 
-  const jerryAnimX = useSharedValue(CELL_SIZE);
-  const jerryAnimY = useSharedValue(CELL_SIZE);
+  const jerryAnimX = useSharedValue(cellSize);
+  const jerryAnimY = useSharedValue(cellSize);
   const jerryScale = useSharedValue(1);
 
   useEffect(() => {
@@ -278,14 +234,10 @@ export default function JerryVsTomGame() {
 
   const config = DIFFICULTIES[difficulty];
 
-  // ── Start Game ──────────────────────────────────────────────────────────────
-  const startGame = useCallback((diff: Difficulty = difficulty) => {
-    engine.startGame(diff as TomAndJerryDifficulty);
-    jerryAnimX.value = 1 * CELL_SIZE;
-    jerryAnimY.value = 1 * CELL_SIZE;
-    isMovingRef.current = false;
+  const startGame = useCallback((diff: Difficulty) => {
     tapMedium();
-  }, [difficulty, jerryAnimX, jerryAnimY, engine]);
+    engine.startGame(diff);
+  }, [engine]);
 
   useEffect(() => {
     if (status !== 'playing') return;
@@ -302,30 +254,16 @@ export default function JerryVsTomGame() {
     return () => clearInterval(interval);
   }, [status, config.tomSpeed]);
 
-  // ── Move Jerry ──────────────────────────────────────────────────────────────
   const moveJerry = useCallback((dir: Direction) => {
     if (status !== 'playing') return;
-    if (isMovingRef.current) return;
-
-    let dr = 0, dc = 0;
-    switch (dir) {
-      case 'UP':    dr = -1; break;
-      case 'DOWN':  dr = 1; break;
-      case 'LEFT':  dc = -1; break;
-      case 'RIGHT': dc = 1; break;
-    }
-
-    const res = engineRef.current.moveJerry(dr, dc);
-    if (!res.moved) return;
-
-    isMovingRef.current = true;
-    tapLight();
-
+    
+    const res = engineRef.current.moveJerry(dir);
+    
     if (res.ateCheese) {
       notifySuccess();
-      const s = engineRef.current.getScore();
-      if (s > engineRef.current.getHighScore()) {
-        AsyncStorage.setItem('jerry_tom_hs', s.toString());
+      const currentScore = engineRef.current.getScore();
+      if (currentScore > engineRef.current.getHighScore()) {
+        AsyncStorage.setItem('jerry_tom_hs', currentScore.toString());
       }
     }
     if (res.caught) {
@@ -334,17 +272,13 @@ export default function JerryVsTomGame() {
 
     const currentJerry = engineRef.current.getState().jerryPos;
     jerryScale.value = withSequence(
-      withTiming(1.2, { duration: 30 }),
-      withTiming(1, { duration: 30 })
+      withTiming(1.15, { duration: 35 }),
+      withTiming(1, { duration: 35 })
     );
 
-    jerryAnimX.value = withTiming(currentJerry.c * CELL_SIZE, { duration: 60, easing: Easing.linear });
-    jerryAnimY.value = withTiming(currentJerry.r * CELL_SIZE, { duration: 60, easing: Easing.linear }, (finished) => {
-      if (finished) {
-        isMovingRef.current = false;
-      }
-    });
-  }, [status, jerryAnimX, jerryAnimY, jerryScale]);
+    jerryAnimX.value = withTiming(currentJerry.c * cellSize, { duration: 65, easing: Easing.out(Easing.quad) });
+    jerryAnimY.value = withTiming(currentJerry.r * cellSize, { duration: 65, easing: Easing.out(Easing.quad) });
+  }, [status, cellSize, jerryAnimX, jerryAnimY, jerryScale]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -376,6 +310,28 @@ export default function JerryVsTomGame() {
   }, [difficulty, moveJerry, startGame]);
 
   const touchStartRef = useRef({ x: 0, y: 0 });
+  const repeatIntervalRef = useRef<any>(null);
+
+  const startContinuousMove = useCallback((dir: Direction) => {
+    moveJerry(dir);
+    if (repeatIntervalRef.current) clearInterval(repeatIntervalRef.current);
+    repeatIntervalRef.current = setInterval(() => {
+      moveJerry(dir);
+    }, 130);
+  }, [moveJerry]);
+
+  const stopContinuousMove = useCallback(() => {
+    if (repeatIntervalRef.current) {
+      clearInterval(repeatIntervalRef.current);
+      repeatIntervalRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (repeatIntervalRef.current) clearInterval(repeatIntervalRef.current);
+    };
+  }, []);
 
   const handleTouchStart = (e: any) => {
     const touch = e.nativeEvent;
@@ -387,7 +343,7 @@ export default function JerryVsTomGame() {
     const touch = e.nativeEvent;
     const dx = touch.pageX - touchStartRef.current.x;
     const dy = touch.pageY - touchStartRef.current.y;
-    const threshold = 20;
+    const threshold = 18;
     if (Math.abs(dx) < threshold && Math.abs(dy) < threshold) return;
     if (Math.abs(dx) > Math.abs(dy)) {
       moveJerry(dx > 0 ? 'RIGHT' : 'LEFT');
@@ -413,10 +369,10 @@ export default function JerryVsTomGame() {
         if (maze[r][c] === 0) {
           w.push(
             <View key={`w-${r}-${c}`} style={[styles.wall, {
-              left: c * CELL_SIZE,
-              top: r * CELL_SIZE,
-              width: CELL_SIZE + 1,
-              height: CELL_SIZE + 1,
+              left: c * cellSize,
+              top: r * cellSize,
+              width: cellSize + 1,
+              height: cellSize + 1,
             }]}>
               <View style={styles.wallInner} />
             </View>
@@ -425,8 +381,8 @@ export default function JerryVsTomGame() {
           const isAlt = (r + c) % 2 === 0;
           f.push(
             <View key={`f-${r}-${c}`} style={{
-              position: 'absolute', left: c * CELL_SIZE, top: r * CELL_SIZE,
-              width: CELL_SIZE + 1, height: CELL_SIZE + 1,
+              position: 'absolute', left: c * cellSize, top: r * cellSize,
+              width: cellSize + 1, height: cellSize + 1,
               backgroundColor: isAlt ? MANSION.floor : MANSION.floorAlt,
             }} />
           );
@@ -434,15 +390,16 @@ export default function JerryVsTomGame() {
       }
     }
     return { walls: w, floors: f };
-  }, [maze]);
+  }, [maze, cellSize]);
 
   return (
-    <View style={styles.root} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-      <MansionBackground />
+    <View style={styles.root}>
+      <CyberBackground theme="tomandjerry" />
 
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         <GameHeader
-          title="TOM & JERRY CHASE"
+          title="TOM & JERRY"
+          category="ACTION"
           score={score}
           highScore={highScore}
           accentColor={config.color}
@@ -452,9 +409,8 @@ export default function JerryVsTomGame() {
         <View style={styles.content}>
           {/* Top Integrated Header: Controls & Difficulty */}
           <View style={styles.topControls}>
-            {/* Difficulty Selector (Always Visible, interactable if idle/lost) */}
             <View style={styles.diffSelector}>
-                {(Object.keys(DIFFICULTIES) as Difficulty[]).map(d => (
+                {(['EASY', 'MEDIUM', 'HARD'] as Difficulty[]).map((d) => (
                     <TouchableOpacity
                         key={d}
                         style={[
@@ -470,97 +426,158 @@ export default function JerryVsTomGame() {
                         disabled={status === 'playing' || status === 'paused'}
                     >
                         <Text style={[styles.diffBtnText, difficulty === d && { color: DIFFICULTIES[d].color }]}>
-                            {DIFFICULTIES[d].label} ({DIFFICULTIES[d].tomCount} Tom{DIFFICULTIES[d].tomCount > 1 ? 's' : ''})
+                            {DIFFICULTIES[d].label}
                         </Text>
                     </TouchableOpacity>
                 ))}
             </View>
             
-            {/* Mobile Actions / Game State Actions */}
+            {/* Action buttons */}
             <View style={styles.actionSelector}>
                 {status === 'idle' || status === 'lost' || status === 'won' ? (
-                     <TouchableOpacity style={[styles.actionBtn, { backgroundColor: config.color }]} onPress={() => startGame(difficulty)}>
-                         <Text style={styles.actionBtnText}>START (Enter)</Text>
+                     <TouchableOpacity style={[styles.actionBtn, { borderColor: config.color }]} onPress={() => startGame(difficulty)}>
+                         <Text style={[styles.actionBtnText, { color: config.color }]}>▶ START</Text>
                      </TouchableOpacity>
                 ) : status === 'playing' ? (
-                     <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.accent.warning }]} onPress={() => {
-                         engine.togglePause();
-                     }}>
-                         <Text style={styles.actionBtnText}>PAUSE (Enter)</Text>
+                     <TouchableOpacity style={[styles.actionBtn, { borderColor: Colors.accent.warning }]} onPress={() => engine.togglePause()}>
+                         <Text style={[styles.actionBtnText, { color: Colors.accent.warning }]}>⏸ PAUSE</Text>
                      </TouchableOpacity>
                 ) : (
-                     <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.accent.success }]} onPress={() => engine.togglePause()}>
-                         <Text style={styles.actionBtnText}>RESUME (Enter)</Text>
+                     <TouchableOpacity style={[styles.actionBtn, { borderColor: Colors.accent.success }]} onPress={() => engine.togglePause()}>
+                         <Text style={[styles.actionBtnText, { color: Colors.accent.success }]}>▶ RESUME</Text>
                      </TouchableOpacity>
                 )}
             </View>
           </View>
 
           <View style={styles.infoBar}>
-            <View style={[styles.infoChip, { borderColor: `${MANSION.cheese}40` }]}>
+            <View style={[styles.infoChip, { borderColor: `${MANSION.cheese}60` }]}>
               <Text style={styles.infoLabel}>CHEESE</Text>
               <Text style={[styles.infoValue, { color: MANSION.cheese }]}>{cheeseCount}</Text>
             </View>
-            <View style={[styles.infoChip, { borderColor: `${config.color}40` }]}>
+            <View style={[styles.infoChip, { borderColor: `${config.color}60` }]}>
               <Text style={styles.infoLabel}>SCORE</Text>
               <Text style={[styles.infoValue, { color: config.color }]}>{score}</Text>
             </View>
-            <View style={[styles.infoChip, { borderColor: `${MANSION.tom}40` }]}>
+            <View style={[styles.infoChip, { borderColor: `${MANSION.tom}60` }]}>
               <Text style={styles.infoLabel}>TOMS</Text>
               <Text style={[styles.infoValue, { color: MANSION.tom }]}>{config.tomCount}</Text>
             </View>
           </View>
 
           {maze.length > 0 && (
-            <View style={[styles.mazeViewport, glassmorphism(0.2)]}>
-              <View style={[styles.mazeContainer, { width: MAZE_PX_W, height: MAZE_PX_H }]}>
+            <View
+              style={[
+                styles.mazeViewport,
+                Platform.OS === 'web' && ({ touchAction: 'none' } as any),
+              ]}
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
+            >
+              <View style={[styles.mazeContainer, { width: mazePxW, height: mazePxH }]}>
                 {floors}
                 {walls}
 
                 {(status !== 'idle') && cheeses.map((ch, i) => (
                   <View key={`ch-${i}`} style={[styles.spriteCell, {
-                    left: ch.c * CELL_SIZE, top: ch.r * CELL_SIZE,
-                    width: CELL_SIZE, height: CELL_SIZE,
+                    left: ch.c * cellSize, top: ch.r * cellSize,
+                    width: cellSize, height: cellSize,
                   }]}>
-                    <CheeseSprite size={CELL_SIZE * 0.8} />
+                    <CheeseSprite size={cellSize * 0.8} />
                   </View>
                 ))}
 
                 {(status !== 'idle') && tomPositions.map((tom, i) => (
                   <View key={`tom-${i}`} style={[styles.spriteCell, {
-                    left: tom.c * CELL_SIZE, top: tom.r * CELL_SIZE,
-                    width: CELL_SIZE, height: CELL_SIZE,
+                    left: tom.c * cellSize, top: tom.r * cellSize,
+                    width: cellSize, height: cellSize,
                   }]}>
-                    <TomSprite size={CELL_SIZE * 0.9} />
+                    <TomSprite size={cellSize * 0.9} />
                   </View>
                 ))}
 
                 {(status !== 'idle') && (
                   <Animated.View style={[styles.spriteCell, {
-                    width: CELL_SIZE, height: CELL_SIZE,
+                    width: cellSize, height: cellSize,
                   }, jerryStyle]}>
-                    <JerrySprite size={CELL_SIZE * 0.9} />
+                    <JerrySprite size={cellSize * 0.9} />
                   </Animated.View>
                 )}
               </View>
 
               {status === 'paused' && (
-                <View style={[styles.pausedOverlay, glassmorphism(0.85)]}>
-                  <Text style={styles.pausedTitle}>⏸ PAUSED</Text>
+                <View style={styles.pausedOverlay}>
+                  <Text style={styles.pausedTitle}>PAUSED</Text>
                   <Text style={styles.pausedSub}>Press Enter to resume</Text>
                 </View>
               )}
             </View>
           )}
 
+          {/* Mobile Arcade D-Pad Navigation Controls */}
+          {isMobile ? (
+            <View style={styles.dpadContainer}>
+              {/* Row 1: UP */}
+              <View style={styles.dpadRow}>
+                <TouchableOpacity
+                  style={[styles.dpadBtn, styles.dpadBtnUp]}
+                  onPressIn={() => { tapLight(); startContinuousMove('UP'); }}
+                  onPressOut={stopContinuousMove}
+                  activeOpacity={0.65}
+                >
+                  <MaterialCommunityIcons name="triangle" size={18} color="#00E5FF" />
+                </TouchableOpacity>
+              </View>
+
+              {/* Row 2: LEFT - CENTER CORE - RIGHT */}
+              <View style={styles.dpadRow}>
+                <TouchableOpacity
+                  style={[styles.dpadBtn, styles.dpadBtnLeft]}
+                  onPressIn={() => { tapLight(); startContinuousMove('LEFT'); }}
+                  onPressOut={stopContinuousMove}
+                  activeOpacity={0.65}
+                >
+                  <MaterialCommunityIcons name="triangle" size={18} color="#00E5FF" style={{ transform: [{ rotate: '-90deg' }] }} />
+                </TouchableOpacity>
+
+                <View style={styles.dpadCenter}>
+                  <View style={styles.dpadCenterDot} />
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.dpadBtn, styles.dpadBtnRight]}
+                  onPressIn={() => { tapLight(); startContinuousMove('RIGHT'); }}
+                  onPressOut={stopContinuousMove}
+                  activeOpacity={0.65}
+                >
+                  <MaterialCommunityIcons name="triangle" size={18} color="#00E5FF" style={{ transform: [{ rotate: '90deg' }] }} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Row 3: DOWN */}
+              <View style={styles.dpadRow}>
+                <TouchableOpacity
+                  style={[styles.dpadBtn, styles.dpadBtnDown]}
+                  onPressIn={() => { tapLight(); startContinuousMove('DOWN'); }}
+                  onPressOut={stopContinuousMove}
+                  activeOpacity={0.65}
+                >
+                  <MaterialCommunityIcons name="triangle" size={18} color="#00E5FF" style={{ transform: [{ rotate: '180deg' }] }} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+
           <View style={styles.hintRow}>
-            <Text style={styles.hintText}>Mobile: Swipe | Desktop: Arrow Keys, WASD, Enter</Text>
+            <Text style={styles.hintText}>
+              {isMobile ? 'Tap/hold D-pad or swipe maze to guide Jerry' : 'Swipe or Arrow Keys / WASD to move'}
+            </Text>
           </View>
         </View>
 
         <GameOverModal
           visible={status === 'lost' || status === 'won'}
-          title={status === 'won' ? 'YOU ESCAPED WITH CHEESE!' : 'CAUGHT BY TOM!'}
+          title={status === 'won' ? 'ESCAPED!' : 'CAUGHT!'}
           score={score}
           highScore={highScore}
           isNewHighScore={score >= highScore && score > 0}
@@ -579,7 +596,7 @@ export default function JerryVsTomGame() {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: MANSION.bg },
+  root: { flex: 1, backgroundColor: 'transparent' },
   safe: { flex: 1 },
   content: { flex: 1, alignItems: 'center', justifyContent: 'flex-start', width: '100%' },
 
@@ -589,57 +606,61 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 12,
-    paddingHorizontal: Spacing[4],
-    marginBottom: Spacing[2],
+    gap: 8,
+    paddingHorizontal: Spacing[3],
+    marginBottom: Spacing[1],
   },
   diffSelector: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
   },
   diffBtn: {
     paddingHorizontal: Spacing[3],
-    paddingVertical: Spacing[2],
-    borderRadius: Radius.sm,
+    paddingVertical: Spacing[1],
+    borderRadius: 4,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: '#161522',
   },
-  diffBtnText: { fontFamily: Fonts.heading, fontSize: FontSize.xs, color: Colors.text.muted },
+  diffBtnText: { fontFamily: Fonts.heading, fontSize: FontSize['2xs'], color: '#94A3B8' },
   actionSelector: {
       flexDirection: 'row',
-      gap: 8,
+      gap: 6,
   },
   actionBtn: {
       paddingHorizontal: Spacing[4],
-      paddingVertical: Spacing[2],
-      borderRadius: Radius.sm,
+      paddingVertical: Spacing[1],
+      borderRadius: 4,
+      borderWidth: 1,
+      borderColor: 'rgba(255, 255, 255, 0.12)',
+      backgroundColor: '#161522',
       justifyContent: 'center',
-      ...elegantShadow(1, 5, 0, '#FFF'),
   },
   actionBtnText: {
-      fontFamily: Fonts.heading, fontSize: FontSize.xs, color: '#000',
+      fontFamily: Fonts.heading, fontSize: FontSize['2xs'], color: '#F4F4F5',
   },
 
   infoBar: {
     flexDirection: 'row', justifyContent: 'center', gap: Spacing[2],
     paddingHorizontal: Spacing[2], paddingVertical: Spacing[1],
-    width: '100%', zIndex: 10, marginBottom: Spacing[2]
+    width: '100%', zIndex: 10, marginBottom: Spacing[1]
   },
   infoChip: {
-    flexDirection: 'row', alignItems: 'center', gap: Spacing[2],
+    flexDirection: 'row', alignItems: 'center', gap: Spacing[1],
     paddingHorizontal: Spacing[3], paddingVertical: Spacing[1],
-    borderRadius: Radius.full, borderWidth: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 4, borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: '#12111A',
   },
-  infoLabel: { fontFamily: Fonts.heading, fontSize: FontSize.xs, color: Colors.text.muted },
-  infoValue: { fontFamily: Fonts.heading, fontSize: FontSize.sm },
+  infoLabel: { fontFamily: Fonts.heading, fontSize: FontSize['2xs'], color: '#94A3B8' },
+  infoValue: { fontFamily: Fonts.heading, fontSize: FontSize.xs },
 
   mazeViewport: {
     flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center',
-    overflow: 'hidden', marginHorizontal: 8, borderRadius: Radius.md,
-    borderWidth: 2, borderColor: '#1E2340',
-    backgroundColor: MANSION.bg,
+    overflow: 'hidden', marginHorizontal: 8, borderRadius: 6,
+    backgroundColor: '#0E0D16',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.10)',
   },
   mazeContainer: { position: 'relative', backgroundColor: MANSION.floor },
 
@@ -650,8 +671,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderTopWidth: 2,
     borderLeftWidth: 2,
-    borderBottomWidth: 3,
-    borderRightWidth: 3,
+    borderBottomWidth: 2,
+    borderRightWidth: 2,
     borderTopColor: MANSION.wallLight,
     borderLeftColor: MANSION.wallLight,
     borderBottomColor: MANSION.wallDark,
@@ -661,7 +682,7 @@ const styles = StyleSheet.create({
     width: '60%',
     height: '60%',
     backgroundColor: MANSION.wallCore,
-    borderRadius: 2,
+    borderRadius: 1,
   },
 
   spriteCell: { position: 'absolute', alignItems: 'center', justifyContent: 'center', zIndex: 5 },
@@ -669,14 +690,76 @@ const styles = StyleSheet.create({
   pausedOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center', justifyContent: 'center', zIndex: 20,
-    backgroundColor: 'rgba(5, 6, 16, 0.9)',
+    backgroundColor: 'rgba(7, 5, 14, 0.95)',
   },
-  pausedTitle: { fontFamily: Fonts.heading, fontSize: FontSize['2xl'], color: MANSION.accent, letterSpacing: 4 },
-  pausedSub: { fontFamily: Fonts.body, fontSize: FontSize.sm, color: '#FFF', opacity: 0.7, marginTop: Spacing[2] },
+  pausedTitle: { fontFamily: Fonts.heading, fontSize: FontSize.xl, color: MANSION.accent, letterSpacing: 3 },
+  pausedSub: { fontFamily: Fonts.body, fontSize: FontSize.xs, color: '#FFF', opacity: 0.7, marginTop: Spacing[1] },
 
-  hintRow: { width: '100%', alignItems: 'center', paddingVertical: 6 },
+  hintRow: { width: '100%', alignItems: 'center', paddingVertical: 4 },
   hintText: {
-    fontFamily: Fonts.body, fontSize: FontSize.xs, color: '#FFF', opacity: 0.4,
-    backgroundColor: 'rgba(0,0,0,0.4)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4,
+    fontFamily: Fonts.body, fontSize: FontSize['2xs'], color: '#FFF', opacity: 0.5,
+    backgroundColor: 'rgba(0,0,0,0.4)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 2,
+  },
+
+  // Mobile Arcade D-Pad Styling
+  dpadContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
+    marginBottom: 2,
+  },
+  dpadRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dpadBtn: {
+    width: 46,
+    height: 44,
+    backgroundColor: '#161522',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 229, 255, 0.28)',
+    shadowColor: '#00E5FF',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  dpadBtnUp: {
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+    borderBottomWidth: 0,
+  },
+  dpadBtnDown: {
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    borderTopWidth: 0,
+  },
+  dpadBtnLeft: {
+    borderTopLeftRadius: 8,
+    borderBottomLeftRadius: 8,
+    borderRightWidth: 0,
+  },
+  dpadBtnRight: {
+    borderTopRightRadius: 8,
+    borderBottomRightRadius: 8,
+    borderLeftWidth: 0,
+  },
+  dpadCenter: {
+    width: 44,
+    height: 44,
+    backgroundColor: '#12111A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  dpadCenterDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: 'rgba(0, 229, 255, 0.35)',
   },
 });

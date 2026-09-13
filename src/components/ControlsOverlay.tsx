@@ -9,9 +9,9 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BaseComponent, BaseComponentState } from './BaseComponent';
-import { Colors, elegantShadow } from '../theme/colors';
+import { Colors } from '../theme/colors';
 import { Fonts, FontSize } from '../theme/typography';
-import { Spacing, Radius } from '../theme/spacing';
+import { Spacing } from '../theme/spacing';
 
 export interface ControlsOverlayProps {
   instructions: string[];
@@ -24,8 +24,10 @@ export interface ControlsOverlayState extends BaseComponentState {
 
 /**
  * ControlsOverlay Component
- * Implements OOP BaseComponent with encapsulated expand/collapse state,
- * animated drawer interpolation, and responsive control badges.
+ * Commercial-grade expandable drawer:
+ * - Clear modern typography for instructions & key labels
+ * - High-contrast keycap pills
+ * - Smooth collapse/expand animation
  */
 export class ControlsOverlay extends BaseComponent<ControlsOverlayProps, ControlsOverlayState> {
   private animationValue: Animated.Value;
@@ -44,8 +46,8 @@ export class ControlsOverlay extends BaseComponent<ControlsOverlayProps, Control
     this.safeSetState({ isOpen: nextIsOpen }, () => {
       Animated.timing(this.animationValue, {
         toValue: nextIsOpen ? 1 : 0,
-        duration: 300,
-        easing: Easing.out(Easing.exp),
+        duration: 250,
+        easing: Easing.out(Easing.cubic),
         useNativeDriver: false,
       }).start();
     });
@@ -57,17 +59,17 @@ export class ControlsOverlay extends BaseComponent<ControlsOverlayProps, Control
 
     const maxHeight = this.animationValue.interpolate({
       inputRange: [0, 1],
-      outputRange: [0, 320],
+      outputRange: [0, 360],
     });
 
     const opacity = this.animationValue.interpolate({
-      inputRange: [0, 0.2, 1],
-      outputRange: [0, 0, 1],
+      inputRange: [0, 0.3, 1],
+      outputRange: [0, 0.4, 1],
     });
 
     const marginTop = this.animationValue.interpolate({
       inputRange: [0, 1],
-      outputRange: [0, Spacing[4]],
+      outputRange: [0, 12],
     });
 
     const rotate = this.animationValue.interpolate({
@@ -79,22 +81,22 @@ export class ControlsOverlay extends BaseComponent<ControlsOverlayProps, Control
       <View
         style={[
           styles.container,
-          { marginHorizontal: isMobile ? Spacing[3] : Spacing[5] },
+          { marginHorizontal: isMobile ? 12 : 24 },
         ]}
       >
         <Pressable
           onPress={this.toggle}
           style={({ pressed }) => [
             styles.header,
-            { opacity: pressed ? 0.7 : 1 },
+            { opacity: pressed ? 0.8 : 1 },
           ]}
         >
           <View style={styles.headerLeft}>
-            <Ionicons name="game-controller-outline" size={18} color={Colors.text.primary} />
-            <Text style={styles.headerText}>How to Play & Controls</Text>
+            <Ionicons name="game-controller-outline" size={17} color={Colors.accent.primary} />
+            <Text style={styles.headerText}>HOW TO PLAY & CONTROLS</Text>
           </View>
           <Animated.View style={{ transform: [{ rotate }] }}>
-            <Ionicons name="chevron-down" size={18} color={Colors.text.muted} />
+            <Ionicons name="chevron-down" size={16} color="#94A3B8" />
           </Animated.View>
         </Pressable>
 
@@ -143,82 +145,88 @@ export class ControlsOverlay extends BaseComponent<ControlsOverlayProps, Control
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: Spacing[4],
-    backgroundColor: Colors.bg.card,
-    borderRadius: Radius.lg,
+    marginBottom: 12,
+    backgroundColor: '#12111A',
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: 'rgba(0, 229, 255, 0.15)',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
     overflow: 'hidden',
     zIndex: 30,
-    ...elegantShadow(0.2, 10, 4),
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: Spacing[4],
-    backgroundColor: 'rgba(255,255,255,0.02)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: '#161522',
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing[2],
+    gap: 8,
   },
   headerText: {
-    fontFamily: Fonts.bodySemiBold,
-    fontSize: FontSize.sm,
-    color: Colors.text.primary,
+    fontFamily: Fonts.sans,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#E2E8F0',
+    letterSpacing: 0.5,
   },
   content: {
-    paddingHorizontal: Spacing[4],
-    paddingBottom: Spacing[4],
+    paddingHorizontal: 14,
+    paddingBottom: 14,
   },
   section: {
-    marginBottom: Spacing[4],
+    marginBottom: 12,
   },
   sectionTitle: {
     fontFamily: Fonts.heading,
-    fontSize: FontSize.xs,
-    color: Colors.text.muted,
-    marginBottom: Spacing[2],
-    letterSpacing: 1,
+    fontSize: 9,
+    color: '#A78BFA',
+    marginBottom: 6,
+    letterSpacing: 0.8,
   },
   instructionText: {
     fontFamily: Fonts.body,
-    fontSize: FontSize.sm,
-    color: Colors.text.secondary,
-    marginBottom: Spacing[1],
-    lineHeight: 20,
+    fontSize: 13,
+    color: '#CBD5E1',
+    marginBottom: 4,
+    lineHeight: 18,
   },
   controlsGrid: {
     flexWrap: 'wrap',
-    gap: Spacing[3],
+    gap: 8,
   },
   controlItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing[2],
-    backgroundColor: Colors.bg.secondary,
-    paddingHorizontal: Spacing[3],
-    paddingVertical: Spacing[2],
-    borderRadius: Radius.md,
+    gap: 8,
+    backgroundColor: '#161522',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   keyBadge: {
-    backgroundColor: Colors.bg.primary,
-    paddingHorizontal: Spacing[2],
-    paddingVertical: 2,
-    borderRadius: Radius.sm,
+    backgroundColor: '#0E0D16',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
     borderWidth: 1,
-    borderColor: Colors.bg.glassBorder,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
   },
   keyText: {
-    fontFamily: Fonts.bodyBold,
-    fontSize: FontSize.xs,
-    color: Colors.text.primary,
+    fontFamily: Fonts.sans,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#CBD5E1',
   },
   actionText: {
     fontFamily: Fonts.body,
-    fontSize: FontSize.xs,
-    color: Colors.text.secondary,
+    fontSize: 12,
+    color: '#F1F5F9',
   },
 });
+

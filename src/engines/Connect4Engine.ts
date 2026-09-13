@@ -69,6 +69,12 @@ export class Connect4Engine extends BaseEngine<Connect4State> {
     this.notify();
   }
 
+  public resetAll(): void {
+    this.p1Score = 0;
+    this.p2Score = 0;
+    this.reset();
+  }
+
   public setGameMode(mode: 'PvP' | 'PvE'): void {
     this.gameMode = mode;
     this.reset();

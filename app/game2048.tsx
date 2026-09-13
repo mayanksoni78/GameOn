@@ -11,17 +11,11 @@ import { Spacing, Radius } from '../src/theme/spacing';
 import { CyberBackground } from '../src/components/CyberBackground';
 import { GameHeader } from '../src/components/GameHeader';
 import { GameOverModal } from '../src/components/GameOverModal';
-import { ControlsOverlay } from '../src/components/ControlsOverlay';
-import { screenWidth, screenHeight } from '../src/utils/dimensions';
+import { useWindowDimensions } from 'react-native';
 import { tapLight, notifySuccess, notifyError, tapMedium } from '../src/utils/haptics';
 import { useKeyboard, KeyboardKey } from '../src/hooks/useKeyboard';
 
 const ACCENT = Colors.accent.warning;
-
-// Increase board size
-const BOARD_PADDING = Spacing[4] * 2;
-const MAX_BOARD = Math.min(screenWidth - 32, 500); 
-const CELL_SIZE = Math.floor((MAX_BOARD - Spacing[2] * 5) / 4);
 
 type TileData = {
     id: string;
@@ -52,16 +46,16 @@ const TILE_COLORS: Record<number, { bg: string, text: string }> = {
 // Generates a random ID
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
-const AnimatedTile = memo(({ tile }: { tile: TileData }) => {
+const AnimatedTile = memo(({ tile, cellSize }: { tile: TileData; cellSize: number }) => {
     const { val, isNew, isMerged, r, c } = tile;
     const scale = useSharedValue(isNew ? 0 : 1);
-    const animX = useSharedValue(c * (CELL_SIZE + Spacing[2]));
-    const animY = useSharedValue(r * (CELL_SIZE + Spacing[2]));
+    const animX = useSharedValue(c * (cellSize + Spacing[2]));
+    const animY = useSharedValue(r * (cellSize + Spacing[2]));
     
     useEffect(() => {
         // Slide animation
-        animX.value = withTiming(c * (CELL_SIZE + Spacing[2]), { duration: 120, easing: Easing.out(Easing.quad) });
-        animY.value = withTiming(r * (CELL_SIZE + Spacing[2]), { duration: 120, easing: Easing.out(Easing.quad) });
+        animX.value = withTiming(c * (cellSize + Spacing[2]), { duration: 120, easing: Easing.out(Easing.quad) });
+        animY.value = withTiming(r * (cellSize + Spacing[2]), { duration: 120, easing: Easing.out(Easing.quad) });
 
         // Pop animation
         if (isNew) {
@@ -72,7 +66,7 @@ const AnimatedTile = memo(({ tile }: { tile: TileData }) => {
                 withSpring(1, { damping: 14, stiffness: 200, mass: 0.8 })
             );
         }
-    }, [r, c, isNew, isMerged]);
+    }, [r, c, isNew, isMerged, cellSize]);
 
     const animStyle = useAnimatedStyle(() => ({
         transform: [
@@ -88,7 +82,7 @@ const AnimatedTile = memo(({ tile }: { tile: TileData }) => {
         <Animated.View
             style={[
                 styles.tileWrapper,
-                { width: CELL_SIZE, height: CELL_SIZE },
+                { width: cellSize, height: cellSize },
                 animStyle
             ]}
         >
@@ -96,14 +90,14 @@ const AnimatedTile = memo(({ tile }: { tile: TileData }) => {
                 styles.tileInner,
                 { 
                     backgroundColor: styleDef.bg,
-                    ...elegantShadow(0.6, 12, 4),
+                    ...elegantShadow(0.6, 8, 4),
                     shadowColor: styleDef.bg,
                 }
             ]}>
                 {/* 3D Highlight */}
-                <View style={{ position: 'absolute', top: 2, left: 2, width: '40%', height: '30%', backgroundColor: 'rgba(255,255,255,0.4)', borderRadius: 4 }} />
+                <View style={{ position: 'absolute', top: 2, left: 2, width: '40%', height: '30%', backgroundColor: 'rgba(255,255,255,0.4)', borderRadius: 2 }} />
                 
-                <Text style={[styles.cellText, { color: styleDef.text, fontSize: val >= 1024 ? FontSize.lg : FontSize.xl }]}>
+                <Text style={[styles.cellText, { color: styleDef.text, fontSize: val >= 1024 ? FontSize.xs : FontSize.sm }]}>
                     {val}
                 </Text>
             </View>
@@ -117,6 +111,10 @@ import { useEngine, Game2048Engine, Direction2048 } from '../src/engines';
 export default function Game2048() {
   const [gameState, engine] = useEngine(() => new Game2048Engine());
   const { board, score, highScore, gameOver } = gameState;
+  const { width } = useWindowDimensions();
+
+  const maxBoard = Math.min(width - 32, 440);
+  const cellSize = Math.floor((maxBoard - Spacing[2] * 5) / 4);
 
   const [gameStarted, setGameStarted] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -208,48 +206,27 @@ export default function Game2048() {
     }
   }, { disableRepeat: true, preventDefault: true });
 
-  if (board.length === 0) return null;
+  if (board.length === 0) return <View style={{ flex: 1, backgroundColor: '#09080E' }} />;
 
   return (
     <View style={styles.root}>
-      <CyberBackground autoScroll />
+      <CyberBackground theme="2048" />
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         
         <GameHeader
           title="2048"
+          category="PUZZLE"
           score={score}
           highScore={highScore}
           accentColor={ACCENT}
           onBack={() => router.replace('/')}
         />
 
-        <ControlsOverlay
-          instructions={[
-            "Combine matching numbers to create a larger number.",
-            "Reach the 2048 tile to win!"
-          ]}
-          controls={[
-            { action: "Slide Tiles", input: "Swipe / WASD / Arrows" },
-            { action: "Start / Pause", input: "Enter" },
-          ]}
-        />
 
         <View style={styles.mainContent}>
-            
-            <View style={styles.scoreContainer}>
-                <View style={[styles.scoreCard, glassmorphism()]}>
-                    <Text style={styles.scoreLabel}>SCORE</Text>
-                    <Text style={styles.scoreValue}>{score}</Text>
-                </View>
-                <View style={[styles.scoreCard, glassmorphism()]}>
-                    <Text style={styles.scoreLabel}>BEST</Text>
-                    <Text style={styles.scoreValue}>{highScore}</Text>
-                </View>
-            </View>
-
             <GestureDetector gesture={pan}>
                 <View style={styles.boardWrapper}>
-                    <View style={[styles.board, glassmorphism(), { width: MAX_BOARD, height: MAX_BOARD }]}>
+                    <View style={[styles.board, glassmorphism(), { width: maxBoard, height: maxBoard }]}>
                         
                         {/* Static Grid Background */}
                         {Array(4).fill(null).map((_, r) => (
@@ -257,7 +234,7 @@ export default function Game2048() {
                                 {Array(4).fill(null).map((_, c) => (
                                     <View
                                         key={`bg-c-${c}`}
-                                        style={[styles.cellBackground, { width: CELL_SIZE, height: CELL_SIZE }]}
+                                        style={[styles.cellBackground, { width: cellSize, height: cellSize }]}
                                     />
                                 ))}
                             </View>
@@ -266,21 +243,21 @@ export default function Game2048() {
                         {/* Animated Tiles Layer */}
                         <View style={StyleSheet.absoluteFill}>
                             {tiles.map(tile => (
-                                <AnimatedTile key={tile.id} tile={tile} />
+                                <AnimatedTile key={tile.id} tile={tile} cellSize={cellSize} />
                             ))}
                         </View>
 
                         {/* Overlays */}
                         {!gameStarted && !gameOver && (
-                          <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', zIndex: 50, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: Radius.lg }]}>
-                            <TouchableOpacity onPress={startGame} activeOpacity={0.7} style={{ paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', backgroundColor: 'rgba(0,0,0,0.6)' }}>
-                              <Text style={{ fontFamily: Fonts.heading, fontSize: FontSize.xl, color: Colors.white, textShadowColor: ACCENT, textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 10, letterSpacing: 2 }}>START</Text>
+                          <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', zIndex: 50, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 4 }]}>
+                            <TouchableOpacity onPress={startGame} activeOpacity={0.7} style={{ paddingHorizontal: 20, paddingVertical: 10, borderRadius: 4, borderWidth: 2, borderColor: ACCENT, backgroundColor: '#0C061A' }}>
+                              <Text style={{ fontFamily: Fonts.heading, fontSize: FontSize.md, color: ACCENT, letterSpacing: 2 }}>▶ START</Text>
                             </TouchableOpacity>
                           </View>
                         )}
                         {isPaused && (
-                          <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', zIndex: 50, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: Radius.lg }]}>
-                            <Text style={{ fontFamily: Fonts.heading, fontSize: 32, color: Colors.white, textShadowColor: ACCENT, textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 10, letterSpacing: 4 }}>PAUSED</Text>
+                          <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', zIndex: 50, backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: 4 }]}>
+                            <Text style={{ fontFamily: Fonts.heading, fontSize: FontSize.xl, color: ACCENT, letterSpacing: 4 }}>PAUSED</Text>
                           </View>
                         )}
 
@@ -308,7 +285,7 @@ export default function Game2048() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Colors.bg.primary,
+    backgroundColor: 'transparent',
   },
   safe: {
     flex: 1,
@@ -317,13 +294,14 @@ const styles = StyleSheet.create({
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
+      paddingTop: Spacing[4],
   },
   scoreContainer: {
       flexDirection: 'row',
       justifyContent: 'center',
       gap: Spacing[4],
       marginBottom: Spacing[6],
-      width: MAX_BOARD,
+      width: '100%',
   },
   scoreCard: {
       flex: 1,
@@ -355,22 +333,25 @@ const styles = StyleSheet.create({
   },
   board: {
     padding: Spacing[2],
-    backgroundColor: 'rgba(10, 5, 20, 0.75)',
-    borderRadius: Radius.lg,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.1)',
-    ...elegantShadow(0.5, 30, 15),
-    shadowColor: ACCENT,
+    backgroundColor: '#12111A',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.10)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 4,
   },
   row: {
     flexDirection: 'row',
   },
   cellBackground: {
     margin: Spacing[1],
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: Radius.sm,
+    backgroundColor: '#1A1926',
+    borderRadius: 4,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.02)',
+    borderColor: 'rgba(255, 255, 255, 0.04)',
   },
   tileWrapper: {
     position: 'absolute',

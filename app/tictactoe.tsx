@@ -1,5 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  useWindowDimensions,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import Animated, {
@@ -7,8 +14,8 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
   withTiming,
-  withSequence,
   withRepeat,
+  withSequence,
 } from 'react-native-reanimated';
 import { Colors, glassmorphism, elegantShadow } from '../src/theme/colors';
 import { Fonts, FontSize } from '../src/theme/typography';
@@ -16,30 +23,23 @@ import { Spacing, Radius } from '../src/theme/spacing';
 import { CyberBackground } from '../src/components/CyberBackground';
 import { GameHeader } from '../src/components/GameHeader';
 import { GameOverModal } from '../src/components/GameOverModal';
-import { screenWidth } from '../src/utils/dimensions';
 import { tapLight, tapMedium, notifySuccess, notifyError } from '../src/utils/haptics';
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 const ACCENT    = '#00E5FF'; // Neon Cyan
 const X_COLOR   = '#00E5FF'; // Neon Cyan
-const O_COLOR   = '#A855F7'; // Deep Violet
-const WIN_COLOR = '#0070FF'; // Electric Blue
-
-// ─── Sizing (account for board border so cells fit exactly) ───────────────────
+const O_COLOR   = '#FF2A6D'; // Neon Hot Pink
+const WIN_COLOR = '#FFE600'; // Electric Gold
 const BOARD_BORDER = 2;
-const MAX_BOARD    = Math.min(screenWidth - 48, 396);           // outer
-const BOARD_INNER  = MAX_BOARD - BOARD_BORDER * 2;              // inner content
-const CELL_GAP     = 2;                                         // gap between cells
-const CELL_SIZE    = Math.floor((BOARD_INNER - CELL_GAP * 2) / 3); // exact fit
-const GRID_SIZE    = CELL_SIZE * 3 + CELL_GAP * 2;             // actual grid px
+const CELL_GAP     = 2;
 
 import { useEngine, TicTacToeEngine, PlayerSymbol, GameMode, Difficulty } from '../src/engines';
 
 // ─── AnimatedCell ─────────────────────────────────────────────────────────────
 const AnimatedCell = ({
-  value, onPress, disabled, isWinCell,
+  value, onPress, disabled, isWinCell, cellSize,
 }: {
-  value: PlayerSymbol; onPress: () => void; disabled: boolean; isWinCell: boolean;
+  value: PlayerSymbol; onPress: () => void; disabled: boolean; isWinCell: boolean; cellSize: number;
 }) => {
   const scale   = useSharedValue(0);
   const opacity = useSharedValue(0);
@@ -71,14 +71,14 @@ const AnimatedCell = ({
   }));
 
   const glowBg = useAnimatedStyle(() => ({
-    backgroundColor: `rgba(255,215,0,${0.15 * glow.value})`,
+    backgroundColor: `rgba(255,230,0,${0.2 * glow.value})`,
   }));
 
   const color = value === 'X' ? X_COLOR : O_COLOR;
 
   return (
     <TouchableOpacity
-      style={[styles.cell, { width: CELL_SIZE, height: CELL_SIZE }]}
+      style={[styles.cell, { width: cellSize, height: cellSize }]}
       onPress={onPress}
       disabled={disabled || !!value}
       activeOpacity={0.7}
@@ -91,9 +91,10 @@ const AnimatedCell = ({
             styles.cellText,
             symbolStyle,
             {
+              fontSize: cellSize * 0.50,
               color: isWinCell ? WIN_COLOR : color,
               textShadowColor: isWinCell ? WIN_COLOR : color,
-              textShadowRadius: isWinCell ? 28 : 14,
+              textShadowRadius: isWinCell ? 20 : 10,
               textShadowOffset: { width: 0, height: 0 },
             },
           ]}
@@ -148,6 +149,12 @@ function SegmentedControl<T extends string>({
 // ─── Main Component (OOP Engine Integration) ──────────────────────────────────
 export default function TicTacToe() {
   const [gameState, engine] = useEngine(() => new TicTacToeEngine());
+  const { width } = useWindowDimensions();
+
+  const maxBoard = Math.min(width - 48, 380);
+  const boardInner = maxBoard - BOARD_BORDER * 2;
+  const cellSize = Math.floor((boardInner - CELL_GAP * 2) / 3);
+  const gridSize = cellSize * 3 + CELL_GAP * 2;
 
   const {
     board,
@@ -169,6 +176,7 @@ export default function TicTacToe() {
   };
 
   const fullReset = () => {
+    tapMedium();
     engine.resetAll();
   };
 
@@ -202,11 +210,12 @@ export default function TicTacToe() {
 
   return (
     <View style={styles.root}>
-      <CyberBackground autoScroll />
+      <CyberBackground theme="tictactoe" />
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
 
         <GameHeader
           title="TIC TAC TOE"
+          category="BOARD"
           score={xScore}
           scoreLabel={gameMode === 'PvE' ? 'YOU (X)' : 'PLAYER X'}
           highScore={oScore}
@@ -266,17 +275,17 @@ export default function TicTacToe() {
           </View>
 
           {/* ── Board ─────────────────────────────────────────── */}
-          <View style={[styles.board, { width: MAX_BOARD, height: MAX_BOARD }]}>
+          <View style={[styles.board, { width: maxBoard, height: maxBoard }]}>
             {/* Grid lines */}
             <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-              <View style={[styles.gridLine, { width: CELL_GAP, height: '100%', left: CELL_SIZE }]} />
-              <View style={[styles.gridLine, { width: CELL_GAP, height: '100%', left: CELL_SIZE * 2 + CELL_GAP }]} />
-              <View style={[styles.gridLine, { width: '100%', height: CELL_GAP, top: CELL_SIZE }]} />
-              <View style={[styles.gridLine, { width: '100%', height: CELL_GAP, top: CELL_SIZE * 2 + CELL_GAP }]} />
+              <View style={[styles.gridLine, { width: CELL_GAP, height: '100%', left: cellSize }]} />
+              <View style={[styles.gridLine, { width: CELL_GAP, height: '100%', left: cellSize * 2 + CELL_GAP }]} />
+              <View style={[styles.gridLine, { width: '100%', height: CELL_GAP, top: cellSize }]} />
+              <View style={[styles.gridLine, { width: '100%', height: CELL_GAP, top: cellSize * 2 + CELL_GAP }]} />
             </View>
 
             {/* Cells */}
-            <View style={styles.grid}>
+            <View style={[styles.grid, { width: gridSize, height: gridSize }]}>
               {board.map((cell: any, index: number) => (
                 <AnimatedCell
                   key={index}
@@ -284,6 +293,7 @@ export default function TicTacToe() {
                   onPress={() => handlePress(index)}
                   disabled={gameOver || (gameMode === 'PvE' && currentPlayer !== 'X')}
                   isWinCell={winLine.includes(index)}
+                  cellSize={cellSize}
                 />
               ))}
             </View>
@@ -317,7 +327,7 @@ export default function TicTacToe() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.bg.primary },
+  root: { flex: 1, backgroundColor: 'transparent' },
   safe: { flex: 1 },
 
   scrollContent: {
@@ -332,10 +342,10 @@ const styles = StyleSheet.create({
   settingsPanel: {
     width: '100%',
     padding: Spacing[4],
-    borderRadius: Radius.lg,
-    backgroundColor: 'rgba(20, 10, 40, 0.65)',
+    borderRadius: 8,
+    backgroundColor: '#12111A',
     borderWidth: 1,
-    borderColor: `${ACCENT}40`,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   settingGroup: {
     width: '100%',
@@ -345,7 +355,7 @@ const styles = StyleSheet.create({
   settingLabel: {
     fontFamily: Fonts.heading,
     fontSize: FontSize.xs,
-    color: Colors.text.muted,
+    color: '#94A3B8',
     letterSpacing: 2,
     marginBottom: Spacing[1],
   },
@@ -358,17 +368,18 @@ const styles = StyleSheet.create({
     gap: Spacing[2],
   },
   segItem: {
-    paddingVertical: Spacing[3],
-    paddingHorizontal: Spacing[5],
+    paddingVertical: Spacing[2],
+    paddingHorizontal: Spacing[4],
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    borderRadius: Radius.full,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 4,
+    backgroundColor: '#161522',
   },
   segText: {
     fontFamily: Fonts.heading,
-    fontSize: FontSize.sm,
-    color: Colors.text.muted,
+    fontSize: FontSize.xs,
+    color: '#94A3B8',
     letterSpacing: 0.5,
   },
 
@@ -400,16 +411,19 @@ const styles = StyleSheet.create({
     textShadowRadius: 12,
   },
   midBtn: {
-    width: 46,
-    height: 46,
-    borderRadius: Radius.full,
+    width: 44,
+    height: 44,
+    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#161522',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
   },
   midBtnText: {
     fontFamily: Fonts.heading,
-    fontSize: FontSize.xl,
-    color: Colors.text.secondary,
+    fontSize: FontSize.lg,
+    color: '#F4F4F5',
   },
 
   // Turn
@@ -423,8 +437,6 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.heading,
     fontSize: FontSize.sm,
     letterSpacing: 2,
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 8,
   },
   aiPulse: {
     width: 8, height: 8, borderRadius: 4,
@@ -432,23 +444,24 @@ const styles = StyleSheet.create({
 
   // Board
   board: {
-    borderRadius: Radius.lg,
+    borderRadius: 8,
     overflow: 'hidden',
-    backgroundColor: 'rgba(8, 4, 18, 0.85)',
-    borderWidth: BOARD_BORDER,
-    borderColor: `${ACCENT}40`,
-    ...elegantShadow(0.6, 35, 18),
-    shadowColor: ACCENT,
+    backgroundColor: '#12111A',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.10)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 4,
     alignItems: 'center',
     justifyContent: 'center',
   },
   gridLine: {
     position: 'absolute',
-    backgroundColor: `${ACCENT}40`,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
   grid: {
-    width: GRID_SIZE,
-    height: GRID_SIZE,
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: CELL_GAP,
@@ -460,21 +473,26 @@ const styles = StyleSheet.create({
   },
   cellText: {
     fontFamily: Fonts.heading,
-    fontSize: CELL_SIZE * 0.52,
   },
 
   // Reset
   resetBtn: {
     paddingVertical: Spacing[3],
-    paddingHorizontal: Spacing[8],
-    borderRadius: Radius.md,
+    paddingHorizontal: Spacing[6],
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: `${O_COLOR}30`,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: '#161522',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 3,
   },
   resetBtnText: {
     fontFamily: Fonts.heading,
-    fontSize: FontSize.xs,
-    color: Colors.text.muted,
-    letterSpacing: 2,
+    fontSize: FontSize['2xs'],
+    color: '#F4F4F5',
+    letterSpacing: 1.5,
   },
 });

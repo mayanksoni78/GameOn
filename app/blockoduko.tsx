@@ -1,18 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Animated, PointerEvent
+  Animated, PointerEvent, useWindowDimensions
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors } from '../src/theme/colors';
 import { Fonts, FontSize } from '../src/theme/typography';
-import { Spacing, Radius } from '../src/theme/spacing';
+import { Spacing } from '../src/theme/spacing';
 import { CyberBackground } from '../src/components/CyberBackground';
 import { GameHeader } from '../src/components/GameHeader';
 import { GameOverModal } from '../src/components/GameOverModal';
-import { screenWidth, screenHeight } from '../src/utils/dimensions';
 import { tapLight, tapMedium, notifyError, notifySuccess } from '../src/utils/haptics';
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
@@ -20,14 +19,6 @@ const ACCENT = '#00E5FF';
 
 // ── Grid sizing ───────────────────────────────────────────────────────────────
 const GRID = 10;
-const RESERVED_V = 320;
-const BOARD_SIZE = Math.min(screenWidth - 16, screenHeight - RESERVED_V, 520);
-const CELL = Math.floor(BOARD_SIZE / GRID);
-const ACTUAL_BOARD = CELL * GRID;
-
-// ── Piece tray sizing ─────────────────────────────────────────────────────────
-const TRAY_CELL = Math.floor(CELL * 0.5);
-// Offsetpiece so it sits clearly above the thumb while dragging on touch devices
 const DRAG_OFFSET_Y = 80;
 
 // ── Shape definitions ─────────────────────────────────────────────────────────
@@ -117,6 +108,8 @@ const genThree = (): Piece[] => [randomPiece(), randomPiece(), randomPiece()];
 // ══════════════════════════════════════════════════════════════════════════════
 const DraggablePiece = React.memo(({
   piece, index,
+  cellSize,
+  trayCellSize,
   boardLayoutRef,
   boardStateRef,
   onPlace,
@@ -125,6 +118,8 @@ const DraggablePiece = React.memo(({
 }: {
   piece: Piece;
   index: number;
+  cellSize: number;
+  trayCellSize: number;
   boardLayoutRef: React.MutableRefObject<{ x: number; y: number } | null>;
   boardStateRef: React.MutableRefObject<Board>;
   onPlace: (idx: number, r: number, c: number) => void;
@@ -150,11 +145,11 @@ const DraggablePiece = React.memo(({
     const relY = (pageY - DRAG_OFFSET_Y) - bl.y;
     
     // Snap to grid cells
-    const c = Math.floor(relX / CELL);
-    const r = Math.floor(relY / CELL);
+    const c = Math.floor(relX / cellSize);
+    const r = Math.floor(relY / cellSize);
     
     return { r, c };
-  }, [boardLayoutRef]);
+  }, [boardLayoutRef, cellSize]);
 
   const handlePointerDown = (e: PointerEvent) => {
     isDragging.current = true;
@@ -247,7 +242,7 @@ const DraggablePiece = React.memo(({
             <View
               key={ci}
               style={[
-                { width: TRAY_CELL, height: TRAY_CELL, margin: 1, borderRadius: 3 },
+                { width: trayCellSize, height: trayCellSize, margin: 1, borderRadius: 2 },
                 filled
                   ? {
                       backgroundColor: piece.color,
@@ -277,6 +272,12 @@ import { useEngine, BlockodukoEngine } from '../src/engines';
 // ── Main Game ────────────────────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
 export default function Blockoduko() {
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const boardSize = Math.min(windowWidth - 24, windowHeight - 350, 460);
+  const cellSize = Math.max(22, Math.floor(boardSize / GRID));
+  const actualBoard = cellSize * GRID;
+  const trayCellSize = Math.floor(cellSize * 0.5);
+
   const [gameState, engine] = useEngine(() => new BlockodukoEngine());
   const { grid: board, dockPieces, score, highScore, gameOver } = gameState;
 
@@ -348,17 +349,17 @@ export default function Blockoduko() {
   const onBoardLayout = useCallback((ref: View | null) => {
     if (!ref) return;
     boardViewRef.current = ref;
-    // Delay measurement slightly to ensure paint is complete
     setTimeout(measureBoard, 200);
   }, [measureBoard]);
 
   return (
     <View style={styles.root}>
-      <CyberBackground autoScroll />
+      <CyberBackground theme="blockudoku" />
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
 
         <GameHeader
           title="BLOCKUDOKU"
+          category="PUZZLE"
           score={score}
           highScore={highScore}
           accentColor={ACCENT}
@@ -371,7 +372,7 @@ export default function Blockoduko() {
           <View
             ref={onBoardLayout}
             onLayout={measureBoard}
-            style={[styles.boardFrame, { width: ACTUAL_BOARD, height: ACTUAL_BOARD }]}
+            style={[styles.boardFrame, { width: actualBoard, height: actualBoard }]}
           >
             {Array.from({ length: GRID }, (_, r) => (
               <View key={r} style={styles.row}>
@@ -402,7 +403,6 @@ export default function Blockoduko() {
                     appliedBg = cellColor;
                     appliedBorder = 'rgba(255,255,255,0.25)';
                   } else if (isHover) {
-                    // True green or red for ghosting
                     appliedBg = hoverValid ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)';
                     appliedBorder = hoverValid ? 'rgba(16, 185, 129, 0.8)' : 'rgba(239, 68, 68, 0.8)';
                   }
@@ -412,7 +412,7 @@ export default function Blockoduko() {
                       key={c}
                       style={[
                         styles.cell,
-                        { width: CELL, height: CELL },
+                        { width: cellSize, height: cellSize },
                       ]}
                     >
                       <View
@@ -449,6 +449,8 @@ export default function Blockoduko() {
                   key={piece.id}
                   piece={piece as Piece}
                   index={index}
+                  cellSize={cellSize}
+                  trayCellSize={trayCellSize}
                   boardLayoutRef={boardLayoutRef}
                   boardStateRef={boardRef}
                   onPlace={handlePlace}
@@ -486,86 +488,89 @@ export default function Blockoduko() {
 // ── Styles ───────────────────────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.bg.primary },
+  root: { flex: 1, backgroundColor: 'transparent' },
   safe: { flex: 1 },
   container: {
     flex: 1,
     alignItems: 'center',
-    paddingTop: Spacing[3],
+    paddingTop: 28,
   },
 
   // Board
   boardFrame: {
-    backgroundColor: 'rgba(8, 4, 18, 0.85)',
-    borderRadius: Radius.sm,
+    backgroundColor: '#12111A',
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    overflow: 'hidden', // Contains children so borders don't leak
-    shadowColor: ACCENT,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.25,
-    shadowRadius: 15,
-    elevation: 6,
-    zIndex: 1, // Board is below dragging tray
+    borderColor: 'rgba(255, 255, 255, 0.10)',
+    overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 4,
+    zIndex: 1,
   },
   row: { flexDirection: 'row' },
   cell: {
     borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.18)',
+    borderColor: 'rgba(255, 255, 255, 0.06)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   cellInner: {
-    width: '86%',
-    height: '86%',
-    borderRadius: 3,
+    width: '88%',
+    height: '88%',
+    borderRadius: 2,
   },
   blockGloss: {
     position: 'absolute',
-    top: 2,
-    left: 2,
+    top: 1,
+    left: 1,
     width: '45%',
     height: '35%',
     backgroundColor: 'rgba(255,255,255,0.35)',
-    borderRadius: 2,
+    borderRadius: 1,
   },
 
-  // Tray - requires higher zIndex than board to allow pieces to float over it
+  // Tray
   trayContainer: {
-    width: '100%',
-    maxWidth: 500,
-    marginTop: Spacing[6],
-    height: TRAY_CELL * 4 + Spacing[4] * 2, // Fixed height ensures stable baseline
-    borderRadius: Radius.lg,
+    width: '94%',
+    maxWidth: 460,
+    marginTop: Spacing[4],
+    minHeight: 80,
+    borderRadius: 6,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-evenly',
-    paddingVertical: Spacing[4],
+    paddingVertical: Spacing[2],
     paddingHorizontal: Spacing[2],
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: '#12111A',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    zIndex: 10, // Higher than board
-    elevation: 10,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    zIndex: 10,
+    elevation: 4,
   },
 
   // Restart
   resetBtn: {
-    marginTop: Spacing[6],
+    marginTop: Spacing[4],
     paddingVertical: Spacing[3],
-    paddingHorizontal: Spacing[8],
-    borderRadius: Radius.full,
+    paddingHorizontal: Spacing[6],
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: `${ACCENT}80`,
-    backgroundColor: `${ACCENT}18`,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: '#161522',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 3,
     zIndex: 1,
   },
   resetBtnText: {
     fontFamily: Fonts.heading,
-    fontSize: FontSize.sm,
-    color: ACCENT,
-    letterSpacing: 2,
-    textShadowColor: ACCENT,
-    textShadowRadius: 6,
+    fontSize: FontSize.xs,
+    color: '#F4F4F5',
+    letterSpacing: 1.5,
   },
 });

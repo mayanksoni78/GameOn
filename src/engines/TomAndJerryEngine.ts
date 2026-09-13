@@ -102,9 +102,27 @@ export class TomAndJerryEngine extends BaseEngine<TomAndJerryState> {
     }
   }
 
-  public moveJerry(dr: number, dc: number): { moved: boolean; ateCheese: boolean; caught: boolean; won: boolean } {
+  public moveJerry(
+    dirOrDr: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | number,
+    maybeDc?: number
+  ): { moved: boolean; ateCheese: boolean; caught: boolean; won: boolean } {
     if (this.status !== 'playing') {
       return { moved: false, ateCheese: false, caught: false, won: false };
+    }
+
+    let dr = 0;
+    let dc = 0;
+
+    if (typeof dirOrDr === 'string') {
+      switch (dirOrDr) {
+        case 'UP': dr = -1; dc = 0; break;
+        case 'DOWN': dr = 1; dc = 0; break;
+        case 'LEFT': dr = 0; dc = -1; break;
+        case 'RIGHT': dr = 0; dc = 1; break;
+      }
+    } else {
+      dr = dirOrDr;
+      dc = maybeDc ?? 0;
     }
 
     const nr = this.jerryPos.r + dr;

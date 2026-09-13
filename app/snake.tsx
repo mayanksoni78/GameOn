@@ -1,27 +1,25 @@
 import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
-import { View, Text, StyleSheet, Dimensions, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Colors, glassmorphism, elegantShadow } from '../src/theme/colors';
-import { Radius, Spacing } from '../src/theme/spacing';
+import { Colors, elegantShadow } from '../src/theme/colors';
+import { Spacing } from '../src/theme/spacing';
 import { Fonts, FontSize } from '../src/theme/typography';
 import { CyberBackground } from '../src/components/CyberBackground';
 import { GameHeader } from '../src/components/GameHeader';
 import { GameOverModal } from '../src/components/GameOverModal';
 import { tapLight, notifySuccess, notifyError, tapMedium } from '../src/utils/haptics';
 import { useKeyboard, KeyboardKey } from '../src/hooks/useKeyboard';
-import Animated, { useSharedValue, useAnimatedStyle, withSequence, withTiming, withRepeat, Easing, withDelay } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withSequence, withTiming, withRepeat, withDelay, Easing } from 'react-native-reanimated';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 // ---- Theme Constants ----
 const ACCENT_WHITE = '#FFFFFF';
-const DARK_BLUE_BG = '#0B132B';
-const DARK_PURPLE_BG = '#1C0B2B';
+const DARK_BLUE_BG = '#07050E';
+const DARK_PURPLE_BG = '#0E091E';
 
 // Realistic Snake Color Palette
 const SNAKE_MAIN = '#2E7D32'; 
@@ -86,24 +84,27 @@ const Fruit3DGraphic = ({ size, color }: { size: number; color: string }) => {
 };
 
 // ---------------------------------------------------------------------------
-// Board background with Crisp White Grid Borders
+// Board background with Crisp High-Contrast Grid Borders
 // ---------------------------------------------------------------------------
 const BoardBackground = memo(({ boardWidth, cellSize }: { boardWidth: number; cellSize: number }) => {
   return (
     <>
       <LinearGradient colors={[DARK_BLUE_BG, '#120D31', DARK_PURPLE_BG]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-      <View pointerEvents="none" style={[StyleSheet.absoluteFill, { flexDirection: 'row', flexWrap: 'wrap' }]}>
+      <View pointerEvents="none" style={{ width: boardWidth, height: boardWidth, flexDirection: 'row', flexWrap: 'wrap' }}>
         {Array.from({ length: GRID_SIZE * GRID_SIZE }).map((_, i) => {
-          const dark = (Math.floor(i / GRID_SIZE) + i) % 2 === 0;
+          const row = Math.floor(i / GRID_SIZE);
+          const col = i % 20;
+          const dark = (row + col) % 2 === 0;
           return (
             <View
               key={i}
               style={{
                 width: cellSize,
                 height: cellSize,
-                backgroundColor: dark ? 'rgba(15, 23, 42, 0.4)' : 'rgba(30, 27, 75, 0.25)',
-                borderWidth: 0.5,
-                borderColor: 'rgba(255, 255, 255, 0.15)', // White Grid Border
+                backgroundColor: dark ? 'rgba(15, 23, 42, 0.45)' : 'rgba(26, 20, 54, 0.30)',
+                borderRightWidth: 1,
+                borderBottomWidth: 1,
+                borderColor: 'rgba(255, 255, 255, 0.10)',
               }}
             />
           );
@@ -137,7 +138,7 @@ const SnakeHead = ({ x, y, cellSize, speed, direction }: any) => {
     if (direction === 'DOWN') target = 90;
     if (direction === 'LEFT') target = 180;
     if (direction === 'RIGHT') target = 0;
-    rotation.value = target;
+    rotation.value = withTiming(target, { duration: 75, easing: Easing.out(Easing.quad) });
   }, [direction]);
 
   useEffect(() => {
@@ -415,8 +416,10 @@ const Particle = ({ x, y, color }: { x: number; y: number; color: string }) => {
 import { useEngine, SnakeEngine } from '../src/engines';
 
 export default function Snake() {
-  const [boardWidth, setBoardWidth] = useState(0);
-  const [cellSize, setCellSize] = useState(0);
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const available = Math.min(windowWidth - 32, windowHeight - 250, 480);
+  const cellSize = Math.max(12, Math.floor(available / GRID_SIZE));
+  const boardWidth = cellSize * GRID_SIZE;
 
   const [difficulty, setDifficulty] = useState<Difficulty>('MEDIUM');
   const [gameState, engine] = useEngine(() => new SnakeEngine(GRID_SIZE, GRID_SIZE));
@@ -446,18 +449,6 @@ export default function Snake() {
       spawnParticles(foodPt.x * cellSizeRef.current + cellSizeRef.current / 2, foodPt.y * cellSizeRef.current + cellSizeRef.current / 2, FRUITS[fType].color);
       notifySuccess();
     });
-
-    const hPad = 32;
-    const vPad = 220;
-    const maxSize = 500;
-    
-    const available = Math.min(SCREEN_W - hPad * 2, SCREEN_H - vPad);
-    const calculatedBoardSize = Math.min(available, maxSize);
-    const exactCellSize = Math.floor(calculatedBoardSize / GRID_SIZE);
-    const exactBoardWidth = exactCellSize * GRID_SIZE;
-
-    setCellSize(exactCellSize);
-    setBoardWidth(exactBoardWidth);
 
     foodScale.value = withRepeat(withSequence(withTiming(1.08, { duration: 600 }), withTiming(0.95, { duration: 600 })), -1, true);
     foodFloat.value = withRepeat(
@@ -549,33 +540,50 @@ export default function Snake() {
     transform: [{ scale: foodScale.value }, { translateY: foodFloat.value }],
   }));
 
-  if (!cellSize || !boardWidth) return null;
+  if (!cellSize || !boardWidth) return <View style={{ flex: 1, backgroundColor: '#09080E' }} />;
 
   return (
     <View style={styles.root}>
-      <CyberBackground autoScroll />
+      <CyberBackground theme="snake" />
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <GameHeader title={`SNAKE - ${difficulty}`} score={score} highScore={highScore} accentColor={ACCENT_WHITE} onBack={() => router.back()} />
+        <GameHeader
+          title="SNAKE"
+          category="ARCADE"
+          score={score}
+          highScore={highScore}
+          accentColor={Colors.neonCyan}
+          onBack={() => router.replace('/')}
+        />
 
         <View style={styles.controlBar}>
-          <TouchableOpacity style={[styles.controlBtn, !gameStarted || isPaused ? { backgroundColor: ACCENT_WHITE } : styles.glassCard]} onPress={!gameStarted ? startGame : (isPaused ? togglePause : undefined)}>
-            <MaterialCommunityIcons name="play" size={22} color={!gameStarted || isPaused ? DARK_BLUE_BG : ACCENT_WHITE} />
-            <Text style={[styles.controlBtnText, { color: !gameStarted || isPaused ? DARK_BLUE_BG : ACCENT_WHITE }]}>{!gameStarted ? 'START' : 'RESUME'}</Text>
+          <TouchableOpacity
+            style={[styles.controlBtn, !gameStarted || isPaused ? styles.controlBtnActive : styles.controlBtnInactive]}
+            onPress={!gameStarted ? startGame : (isPaused ? togglePause : undefined)}
+            activeOpacity={0.8}
+          >
+            <MaterialCommunityIcons name="play" size={16} color={!gameStarted || isPaused ? '#FFFFFF' : Colors.neonCyan} />
+            <Text style={[styles.controlBtnText, { color: !gameStarted || isPaused ? '#FFFFFF' : Colors.neonCyan }]}>
+              {!gameStarted ? 'START' : 'RESUME'}
+            </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.controlBtn, styles.glassCard, (!gameStarted || isPaused) && { opacity: 0.5 }]} onPress={gameStarted && !isPaused ? togglePause : undefined}>
-            <MaterialCommunityIcons name="pause" size={22} color={ACCENT_WHITE} />
-            <Text style={styles.controlBtnText}>PAUSE</Text>
+          <TouchableOpacity
+            style={[styles.controlBtn, styles.controlBtnInactive, (!gameStarted || isPaused) && { opacity: 0.5 }]}
+            onPress={gameStarted && !isPaused ? togglePause : undefined}
+            activeOpacity={0.8}
+          >
+            <MaterialCommunityIcons name="pause" size={16} color="#F1F5F9" />
+            <Text style={[styles.controlBtnText, { color: '#F1F5F9' }]}>PAUSE</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.controlBtn, styles.glassCard]} onPress={restartGame}>
-            <MaterialCommunityIcons name="refresh" size={22} color={ACCENT_WHITE} />
+          <TouchableOpacity style={[styles.controlBtn, styles.controlBtnInactive]} onPress={restartGame} activeOpacity={0.8}>
+            <MaterialCommunityIcons name="refresh" size={16} color={Colors.text.primary} />
           </TouchableOpacity>
 
           {!gameStarted && (
             <View style={styles.diffSelector}>
               {(['EASY', 'MEDIUM', 'HARD'] as Difficulty[]).map((d) => (
-                <TouchableOpacity key={d} onPress={() => setDifficulty(d)} style={[styles.diffTab, difficulty === d && styles.diffTabActive]}>
+                <TouchableOpacity key={d} onPress={() => setDifficulty(d)} style={[styles.diffTab, difficulty === d && styles.diffTabActive]} activeOpacity={0.8}>
                   <Text style={[styles.diffTabText, difficulty === d && styles.diffTabTextActive]}>{d}</Text>
                 </TouchableOpacity>
               ))}
@@ -588,8 +596,8 @@ export default function Snake() {
             {FRUITS.map((fruit, idx) => (
               <React.Fragment key={idx}>
                 <View style={styles.foodHeaderItem}>
-                  <View style={[styles.foodIconWrapper, { backgroundColor: `${fruit.color}15`, borderColor: `${fruit.color}50` }]}>
-                    <Fruit3DGraphic size={22} color={fruit.color} />
+                  <View style={[styles.foodIconWrapper, { backgroundColor: `${fruit.color}20`, borderColor: `${fruit.color}60` }]}>
+                    <Fruit3DGraphic size={20} color={fruit.color} />
                   </View>
                   <View style={styles.foodTextWrapper}>
                     <Text style={styles.foodLabelText}>{fruit.label}</Text>
@@ -604,7 +612,7 @@ export default function Snake() {
 
         <GestureDetector gesture={panGesture}>
           <View style={styles.boardWrapper}>
-            <View className="rounded-3xl overflow-hidden border-2 border-white/20" style={[{ width: boardWidth, height: boardWidth }, elegantShadow(0.5, 28, 14), { shadowColor: '#34D399' }]}>
+            <View style={[{ width: boardWidth, height: boardWidth, borderRadius: 4, overflow: 'hidden', borderWidth: 2, borderColor: '#00E5FF' }, elegantShadow(0.5, 20, 10), { shadowColor: '#00E5FF' }]}>
               
               <BoardBackground boardWidth={boardWidth} cellSize={cellSize} />
 
@@ -613,7 +621,7 @@ export default function Snake() {
               ))}
 
               <Animated.View style={[styles.foodWrapper, foodAnimStyle, { width: cellSize, height: cellSize, left: food.x * cellSize, top: food.y * cellSize }]}>
-                <View style={{ position: 'absolute', bottom: cellSize * 0.05, width: cellSize * 0.6, height: cellSize * 0.15, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 999, transform: [{ scaleX: 1.3 }] }} />
+                <View style={{ position: 'absolute', bottom: cellSize * 0.05, width: cellSize * 0.6, height: cellSize * 0.15, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 2, transform: [{ scaleX: 1.3 }] }} />
                 <Fruit3DGraphic size={cellSize} color={FRUITS[foodType].color} />
               </Animated.View>
 
@@ -627,14 +635,14 @@ export default function Snake() {
 
               {!gameStarted && !isGameOver && (
                 <View style={[StyleSheet.absoluteFill, styles.overlayCenter]}>
-                  <View style={styles.startCard}>
-                    <Text style={styles.messageText}>PRESS ENTER TO START</Text>
-                  </View>
+                  <TouchableOpacity style={styles.startCard} onPress={startGame} activeOpacity={0.8}>
+                    <Text style={styles.messageText}>▶ START GAME</Text>
+                  </TouchableOpacity>
                 </View>
               )}
               {isPaused && (
-                <View style={[StyleSheet.absoluteFill, styles.overlayCenter, { backgroundColor: 'rgba(11, 19, 43, 0.75)' }]}>
-                  <Text style={[styles.messageText, { fontSize: 32 }]}>PAUSED</Text>
+                <View style={[StyleSheet.absoluteFill, styles.overlayCenter, { backgroundColor: 'rgba(7, 5, 14, 0.85)' }]}>
+                  <Text style={[styles.messageText, { fontSize: 24 }]}>PAUSED</Text>
                 </View>
               )}
             </View>
@@ -656,28 +664,29 @@ export default function Snake() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: DARK_BLUE_BG },
+  root: { flex: 1, backgroundColor: 'transparent' },
   safe: { flex: 1 },
-  glassCard: { backgroundColor: 'rgba(255, 255, 255, 0.08)', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)' },
-  controlBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing[4], paddingBottom: Spacing[3], gap: Spacing[3] },
-  controlBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing[4], paddingVertical: Spacing[2], borderRadius: Radius.full, gap: Spacing[2] },
-  controlBtnText: { fontFamily: Fonts.heading, fontSize: FontSize.sm, color: ACCENT_WHITE },
-  diffSelector: { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: Radius.full, padding: 4, marginLeft: Spacing[2], borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
-  diffTab: { paddingHorizontal: Spacing[4], paddingVertical: Spacing[2], borderRadius: Radius.full },
-  diffTabActive: { backgroundColor: 'rgba(255,255,255,0.2)' },
-  diffTabText: { fontFamily: Fonts.heading, fontSize: FontSize.sm, color: 'rgba(255,255,255,0.5)' },
-  diffTabTextActive: { color: ACCENT_WHITE },
-  foodHeaderContainer: { alignItems: 'center', justifyContent: 'center', paddingBottom: Spacing[3], paddingHorizontal: Spacing[4] },
-  foodHeaderPanel: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-evenly', width: '100%', maxWidth: 320, backgroundColor: 'rgba(15, 23, 42, 0.7)', paddingHorizontal: Spacing[4], paddingVertical: Spacing[3], borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.12)', shadowColor: '#34D399', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 10 },
-  foodHeaderItem: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  foodIconWrapper: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
+  controlBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing[3], paddingBottom: Spacing[2], gap: Spacing[2], flexWrap: 'wrap' },
+  controlBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing[3], paddingVertical: Spacing[2], borderRadius: 4, gap: Spacing[1], borderWidth: 1 },
+  controlBtnActive: { backgroundColor: 'rgba(0, 229, 255, 0.20)', borderColor: '#00E5FF', shadowColor: '#00E5FF', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 6, elevation: 3 },
+  controlBtnInactive: { backgroundColor: '#161522', borderColor: 'rgba(255, 255, 255, 0.10)' },
+  controlBtnText: { fontFamily: Fonts.sans, fontWeight: '700', fontSize: FontSize.xs, letterSpacing: 1 },
+  diffSelector: { flexDirection: 'row', backgroundColor: '#12111A', borderRadius: 4, padding: 2, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)' },
+  diffTab: { paddingHorizontal: Spacing[3], paddingVertical: Spacing[1], borderRadius: 2 },
+  diffTabActive: { backgroundColor: '#201E30', borderWidth: 1, borderColor: '#00E5FF' },
+  diffTabText: { fontFamily: Fonts.sans, fontWeight: '600', fontSize: FontSize['2xs'], color: '#71717A' },
+  diffTabTextActive: { color: '#F4F4F5', fontWeight: '700' },
+  foodHeaderContainer: { alignItems: 'center', justifyContent: 'center', paddingBottom: Spacing[2], paddingHorizontal: Spacing[3] },
+  foodHeaderPanel: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-evenly', width: '100%', maxWidth: 360, backgroundColor: '#12111A', paddingHorizontal: Spacing[3], paddingVertical: Spacing[2], borderRadius: 6, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)' },
+  foodHeaderItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  foodIconWrapper: { width: 32, height: 32, borderRadius: 4, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
   foodTextWrapper: { justifyContent: 'center' },
-  foodLabelText: { fontFamily: Fonts.bodySemiBold, fontSize: 10, color: 'rgba(255,255,255,0.5)', letterSpacing: 1, marginBottom: 2 },
-  foodPointsText: { fontFamily: Fonts.heading, fontSize: FontSize.sm, fontWeight: '800' },
-  foodDivider: { width: 1, height: 24, backgroundColor: 'rgba(255,255,255,0.15)' },
+  foodLabelText: { fontFamily: Fonts.sans, fontWeight: '600', fontSize: 9, color: '#94A3B8', letterSpacing: 0.5, marginBottom: 1 },
+  foodPointsText: { fontFamily: Fonts.heading, fontSize: FontSize['2xs'] },
+  foodDivider: { width: 1, height: 20, backgroundColor: 'rgba(255, 255, 255, 0.08)' },
   boardWrapper: { flex: 1, alignItems: 'center', justifyContent: 'flex-start', paddingTop: Spacing[1] },
   foodWrapper: { position: 'absolute', alignItems: 'center', justifyContent: 'center', zIndex: 1 },
-  overlayCenter: { alignItems: 'center', justifyContent: 'center', zIndex: 100 },
-  startCard: { paddingHorizontal: 24, paddingVertical: 14, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.25)', backgroundColor: 'rgba(11, 19, 43, 0.85)' },
-  messageText: { fontFamily: Fonts.heading, fontSize: FontSize.lg, color: ACCENT_WHITE, textShadowColor: '#34D399', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 10 },
+  overlayCenter: { alignItems: 'center', justifyContent: 'center', zIndex: 100, backgroundColor: 'rgba(7, 6, 12, 0.75)' },
+  startCard: { paddingHorizontal: 24, paddingVertical: 14, borderRadius: 6, borderWidth: 1, borderColor: '#00E5FF', backgroundColor: '#12111A', shadowColor: '#00E5FF', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 4 },
+  messageText: { fontFamily: Fonts.sans, fontWeight: '800', fontSize: FontSize.sm, color: '#00E5FF', letterSpacing: 1.5 },
 });

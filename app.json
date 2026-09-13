@@ -4,9 +4,9 @@
     "slug": "gameon",
     "version": "1.0.0",
     "orientation": "default",
-    "icon": "./assets/images/icon.jpeg",
+    "icon": "./assets/images/icon_gameon.png",
     "scheme": "projectinterface",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
@@ -18,26 +18,27 @@
     "runtimeVersion": "exposdk:54.0.0",
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon.jpeg",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/images/icon_gameon.png",
+        "backgroundColor": "#07050E"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.krishana97.gameon"
     },
     "web": {
       "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/icon.jpeg"
+      "output": "single",
+      "favicon": "./assets/images/icon_gameon.png",
+      "backgroundColor": "#07050E"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/icon.jpeg",
+          "image": "./assets/images/icon_gameon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#07050E"
         }
       ],
       "expo-font",

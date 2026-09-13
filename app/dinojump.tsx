@@ -518,6 +518,8 @@ export default function DinoJump() {
   const gameStartedRef = useRef(gameStarted);
   const isPausedRef = useRef(isPaused);
   const gameLoopRef = useRef<number | null>(null);
+  const lastTimeRef = useRef<number | null>(null);
+  const bgScrollOffset = useSharedValue(0);
 
   // Obstacle pool — each SharedValue must be a top-level hook call
   const _a0=useSharedValue(0),_x0=useSharedValue(0),_t0=useSharedValue(1),_h0=useSharedValue(0);
@@ -583,20 +585,25 @@ export default function DinoJump() {
       }
   };
 
-  const gameLoop = () => {
+  const gameLoop = (timestamp?: number) => {
     if (gameOverRef.current || !gameStartedRef.current || isPausedRef.current) {
         if (gameLoopRef.current) cancelAnimationFrame(gameLoopRef.current);
+        lastTimeRef.current = null;
         return;
     }
 
-    let newY = dinoY.value + velocity.value;
-    let newVel = velocity.value + GRAVITY;
+    const now = timestamp || (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const dt = lastTimeRef.current ? Math.min((now - lastTimeRef.current) / 16.67, 2) : 1;
+    lastTimeRef.current = now;
+
+    let newY = dinoY.value + velocity.value * dt;
+    let newVel = velocity.value + GRAVITY * dt;
     if (newY >= 0) { newY = 0; newVel = 0; }
     dinoY.value = newY;
     velocity.value = newVel;
 
     const currentSpeed = Math.min(MAX_SPEED, BASE_SPEED + Math.sqrt(scoreRef.current / 80) * SPEED_RAMP);
-    gameDistance.value += currentSpeed;
+    gameDistance.value += currentSpeed * dt;
     
     // Smooth frame calculation based on continuous distance division
     const frameSpeedRatio = Math.max(12, 40 - currentSpeed * 2);
@@ -644,17 +651,19 @@ export default function DinoJump() {
                 };
                 const [obsWidth, obsHeight] = OBS_DIMS[type] || [30*0.8, 30*0.8];
                 // obsBottom = how many pixels above the ground floor the obstacle starts
-                // Type 7 (Low Bird): sits just above ground — must JUMP over
-                // Type 9 (High Bird): sits 52px above ground — must DUCK under (ducking dino is ~22px tall)
-                const obsBottom = type === 9 ? 52 : (type === 7 ? 4 : 0);
+                // Type 7 (Low Bird): sits just above ground (4px) — must JUMP over
+                // Type 9 (Mid-Air Bird): sits 26px above ground:
+                //   - Standing Dino reaches -45.2px -> COLLIDES with bird (bird bottom is -26px)
+                //   - Ducking Dino reaches -14px -> SAFELY PASSES UNDERNEATH (bird bottom is -26px, clear gap of 12px)
+                const obsBottom = type === 9 ? 26 : (type === 7 ? 4 : 0);
 
                 const obsHitbox = {
                     left: currentX + 5,
                     right: currentX + obsWidth - 5,
                     // top and bottom are in the same coord as dinoHitbox:
                     // negative values = above ground. 0 = ground level.
-                    top: -(obsHeight + obsBottom) + 5,
-                    bottom: -obsBottom + 5
+                    top: -(obsHeight + obsBottom) + 4,
+                    bottom: -obsBottom + 2
                 };
 
                 if (dinoHitbox.right > obsHitbox.left && 
@@ -701,7 +710,8 @@ export default function DinoJump() {
             
             slot.type.value = type;
             // Set height offset for birds so they render at correct elevation
-            slot.heightOffset.value = type === 9 ? 52 : (type === 7 ? 4 : 0);
+            // Type 9 bird sits at 26px above ground: Dino standing (45px tall) collides, but Dino bowing (14px tall) passes cleanly under
+            slot.heightOffset.value = type === 9 ? 26 : (type === 7 ? 4 : 0);
         }
     }
 
@@ -713,6 +723,7 @@ export default function DinoJump() {
 
   useEffect(() => {
     if (gameStarted && !gameOver && !isPaused) {
+      lastTimeRef.current = null;
       gameLoopRef.current = requestAnimationFrame(gameLoop);
     }
     return () => {
@@ -731,6 +742,7 @@ export default function DinoJump() {
   };
 
   const restart = () => {
+    lastTimeRef.current = null;
     dinoY.value = 0;
     velocity.value = 0;
     gameDistance.value = 0;
@@ -844,7 +856,7 @@ export default function DinoJump() {
 
   return (
     <View style={styles.root}>
-        <CyberBackground scrollOffset={useSharedValue(0)} autoScroll />
+        <CyberBackground theme="dino" />
         
         <View style={[styles.gameArea, { ...StyleSheet.absoluteFillObject }]} {...panResponder.panHandlers}>
             <Animated.View style={dinoContainerStyle}>
@@ -861,6 +873,7 @@ export default function DinoJump() {
         <SafeAreaView style={styles.safe} edges={['top', 'bottom']} pointerEvents="box-none">
             <GameHeader
                 title="DINO JUMP"
+                category="ACTION"
                 score={score}
                 highScore={highScore}
                 accentColor={ACCENT}
@@ -869,34 +882,38 @@ export default function DinoJump() {
 
             <View style={styles.controlBar}>
                 <TouchableOpacity 
-                    style={[styles.controlBtn, (!gameStarted || isPaused) ? { backgroundColor: ACCENT } : styles.glassCard]} 
+                    style={[styles.controlBtn, (!gameStarted || isPaused) ? styles.controlBtnActive : styles.controlBtnInactive]} 
                     onPress={(!gameStarted || isPaused) ? jump : undefined}
                 >
-                    <MaterialCommunityIcons name="play" size={20} color={(!gameStarted || isPaused) ? Colors.bg.primary : ACCENT} />
-                    <Text style={[styles.controlBtnText, { color: (!gameStarted || isPaused) ? Colors.bg.primary : ACCENT }]}>
+                    <MaterialCommunityIcons name="play" size={16} color={(!gameStarted || isPaused) ? '#FFFFFF' : ACCENT} />
+                    <Text style={[styles.controlBtnText, { color: (!gameStarted || isPaused) ? '#FFFFFF' : ACCENT }]}>
                         START
                     </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity 
-                    style={[styles.controlBtn, styles.glassCard, (!gameStarted || isPaused) && { opacity: 0.5 }]} 
+                    style={[styles.controlBtn, styles.controlBtnInactive, (!gameStarted || isPaused) && { opacity: 0.5 }]} 
                     onPress={gameStarted && !isPaused ? () => setIsPaused(true) : undefined}
                 >
-                    <MaterialCommunityIcons name="pause" size={20} color={ACCENT} />
-                    <Text style={[styles.controlBtnText, { color: ACCENT }]}>PAUSE</Text>
+                    <MaterialCommunityIcons name="pause" size={16} color="#F1F5F9" />
+                    <Text style={[styles.controlBtnText, { color: '#F1F5F9' }]}>PAUSE</Text>
                 </TouchableOpacity>
             </View>
 
             {/* Overlays */}
             {!gameStarted && !gameOver && (
-                <View style={[StyleSheet.absoluteFill, styles.overlayCenter]} pointerEvents="none">
-                    <Text style={styles.messageText}>PRESS ENTER TO START</Text>
+                <View style={[StyleSheet.absoluteFill, styles.overlayCenter]} pointerEvents="box-none">
+                    <TouchableOpacity style={styles.startCard} onPress={jump} activeOpacity={0.8}>
+                        <Text style={styles.messageText}>▶ START RUN</Text>
+                    </TouchableOpacity>
                 </View>
             )}
             
             {isPaused && (
-                <View style={[StyleSheet.absoluteFill, styles.overlayCenter]} pointerEvents="none">
-                    <Text style={styles.messageText}>PAUSED</Text>
+                <View style={[StyleSheet.absoluteFill, styles.overlayCenter]} pointerEvents="box-none">
+                    <View style={styles.startCard}>
+                        <Text style={styles.messageText}>PAUSED</Text>
+                    </View>
                 </View>
             )}
 
@@ -916,7 +933,7 @@ export default function DinoJump() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.bg.primary },
+  root: { flex: 1, backgroundColor: 'transparent' },
   safe: { flex: 1, zIndex: 20 },
   gameArea: {
       overflow: 'hidden',
@@ -1022,34 +1039,54 @@ const styles = StyleSheet.create({
       gap: Spacing[3],
       zIndex: 50,
   },
-  glassCard: {
-      backgroundColor: 'rgba(9, 4, 16, 0.6)',
-      borderWidth: 2,
-      borderColor: 'rgba(0, 229, 255, 0.4)',
-  },
   controlBtn: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: Spacing[5],
+      paddingHorizontal: Spacing[4],
       paddingVertical: Spacing[2],
-      borderRadius: Radius.full,
+      borderRadius: 4,
+      borderWidth: 1,
       gap: Spacing[2],
+  },
+  controlBtnActive: {
+      backgroundColor: 'rgba(255, 179, 0, 0.20)',
+      borderColor: '#FFB300',
+      shadowColor: '#FFB300',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.4,
+      shadowRadius: 6,
+      elevation: 3,
+  },
+  controlBtnInactive: {
+      backgroundColor: '#161522',
+      borderColor: 'rgba(255, 255, 255, 0.10)',
   },
   controlBtnText: {
       fontFamily: Fonts.heading,
-      fontSize: FontSize.xs,
+      fontSize: FontSize['2xs'],
   },
   overlayCenter: {
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 100,
   },
+  startCard: {
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: 'rgba(255, 255, 255, 0.12)',
+      backgroundColor: '#12111A',
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.35,
+      shadowRadius: 8,
+      elevation: 4,
+  },
   messageText: {
       fontFamily: Fonts.heading,
-      fontSize: FontSize.lg,
-      color: Colors.white,
-      textShadowColor: ACCENT,
-      textShadowOffset: { width: 0, height: 0 },
-      textShadowRadius: 10,
+      fontSize: FontSize.sm,
+      color: '#F4F4F5',
+      letterSpacing: 1,
   }
 });

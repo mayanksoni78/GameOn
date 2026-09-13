@@ -1,24 +1,23 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, TextInput, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, withSequence } from 'react-native-reanimated';
-import { Colors, glassmorphism, elegantShadow } from '../src/theme/colors';
+import { Colors, elegantShadow } from '../src/theme/colors';
 import { Fonts, FontSize } from '../src/theme/typography';
-import { Spacing, Radius } from '../src/theme/spacing';
+import { Spacing } from '../src/theme/spacing';
 import { CyberBackground } from '../src/components/CyberBackground';
 import { GameHeader } from '../src/components/GameHeader';
 import { GameOverModal } from '../src/components/GameOverModal';
-import { screenWidth } from '../src/utils/dimensions';
 import { tapLight, tapMedium, notifySuccess, notifyError } from '../src/utils/haptics';
 import { useKeyboard } from '../src/hooks/useKeyboard';
 
 const ACCENT_BLUE = '#38BDF8';
 const ACCENT_PURPLE = '#A855F7';
 const BORDER_PURPLE = '#6B21A8';
-const DARK_BLUE_BG = '#080F1E';
-const PANEL_BG = 'rgba(17, 24, 45, 0.8)';
-const BOARD_BG = 'rgba(11, 15, 28, 0.95)';
+const DARK_BLUE_BG = '#07050E';
+const PANEL_BG = 'rgba(14, 9, 30, 0.9)';
+const BOARD_BG = '#07050E';
 const DANGER = '#FB7185';
 const SUCCESS = '#34D399';
 const WARNING = '#FBBF24';
@@ -268,7 +267,7 @@ export default function Sudoku() {
     }
   }, { disableRepeat: true, preventDefault: true });
 
-  const isDesktop = screenWidth >= 768;
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
 
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
@@ -276,15 +275,17 @@ export default function Sudoku() {
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  const boardWidth = isDesktop ? Math.min(screenWidth - 120, 380) : Math.min(screenWidth - 40, 340);
-  const cellSize = boardWidth / 9;
+  const boardWidth = Math.min(windowWidth - 24, windowHeight - 390, 360);
+  const cellSize = Math.max(28, Math.floor(boardWidth / 9));
+  const actualBoardWidth = cellSize * 9;
 
   return (
     <View style={styles.root}>
-      <CyberBackground autoScroll />
+      <CyberBackground theme="sudoku" />
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         <GameHeader
           title="SUDOKU"
+          category="PUZZLE"
           accentColor={ACCENT_PURPLE}
           onBack={() => router.replace('/')}
         />
@@ -311,19 +312,19 @@ export default function Sudoku() {
               <Text style={styles.statusIcon}>⏱</Text>
               <Text style={styles.statusValue}>{formatTime(timer)}</Text>
             </View>
-            <View style={[styles.statusPill, styles.panelBg, { borderColor: mistakes > 0 ? `${DANGER}50` : 'transparent' }]}>
+            <View style={[styles.statusPill, styles.panelBg, { borderColor: mistakes > 0 ? `${DANGER}60` : 'transparent' }]}>
               <Text style={styles.statusIcon}>✗</Text>
               <Text style={[styles.statusValue, { color: mistakes > 0 ? DANGER : Colors.text.secondary }]}>{mistakes}/3</Text>
             </View>
-            <View style={[styles.statusPill, styles.panelBg, { borderColor: hints > 0 ? `${WARNING}40` : 'transparent' }]}>
+            <View style={[styles.statusPill, styles.panelBg, { borderColor: hints > 0 ? `${WARNING}50` : 'transparent' }]}>
               <Text style={styles.statusIcon}>💡</Text>
               <Text style={[styles.statusValue, { color: hints > 0 ? WARNING : Colors.text.muted }]}>{hints}</Text>
             </View>
           </View>
 
           <View style={styles.gameLayout}>
-            <View style={[styles.boardWrapper, { width: boardWidth + 4, height: boardWidth + 4 }]}>
-              <View style={[styles.board, { width: boardWidth, height: boardWidth }]}>
+            <View style={[styles.boardFrame, { width: actualBoardWidth + 6, height: actualBoardWidth + 6 }]}>
+              <View style={[styles.board, { width: actualBoardWidth, height: actualBoardWidth }]}>
                 {board.map((row: any[], r: number) => (
                   <View key={r} style={{ flexDirection: 'row' }}>
                     {row.map((cell: any, c: number) => {
@@ -353,6 +354,20 @@ export default function Sudoku() {
             </View>
 
             <View style={styles.controlsContainer}>
+              {/* Number Pad for on-screen input */}
+              <View style={styles.numberPad}>
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                  <TouchableOpacity
+                    key={num}
+                    style={styles.numKey}
+                    onPress={() => handleInput(num)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.numKeyText}>{num}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
               <View style={styles.toolbar}>
                 <TouchableOpacity style={[styles.toolBtn, styles.panelBg, !canUndo && styles.toolBtnDisabled]} onPress={undo}>
                   <Text style={styles.toolBtnIcon}>↩</Text>
@@ -401,7 +416,7 @@ export default function Sudoku() {
           </View>
 
           <Text style={styles.kbHint}>
-            Arrow keys / WASD to navigate · 1–9 to enter · Delete to erase · H for hint
+            WASD / Arrows to navigate · 1–9 to enter · 0/Delete to erase · H for hint
           </Text>
         </ScrollView>
 
@@ -409,15 +424,15 @@ export default function Sudoku() {
           <View style={styles.pauseOverlay}>
             <Text style={styles.pausedTitle}>PAUSED</Text>
             <Text style={styles.pausedSub}>Take a breath, your timer is frozen.</Text>
-            <TouchableOpacity style={styles.resumeBtn} onPress={() => engine.togglePause(false)}>
-              <Text style={styles.resumeBtnText}>RESUME</Text>
+            <TouchableOpacity style={styles.resumeBtn} onPress={() => engine.togglePause(false)} activeOpacity={0.8}>
+              <Text style={styles.resumeBtnText}>▶  RESUME</Text>
             </TouchableOpacity>
           </View>
         )}
 
         <GameOverModal
           visible={isWon || gameOver}
-          title={isWon ? "PUZZLE SOLVED! 🎉" : "GAME OVER"}
+          title={isWon ? "PUZZLE SOLVED!" : "GAME OVER"}
           score={isWon ? formatTime(timer) : `${mistakes} Mistakes`}
           highScore={''}
           isNewHighScore={false}
@@ -431,32 +446,37 @@ export default function Sudoku() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: DARK_BLUE_BG },
+  root: { flex: 1, backgroundColor: 'transparent' },
   safe: { flex: 1 },
   panelBg: {
-    backgroundColor: PANEL_BG,
+    backgroundColor: '#12111A',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   scrollContent: {
     alignItems: 'center',
     paddingHorizontal: Spacing[2],
-    paddingTop: Spacing[2],
-    paddingBottom: Spacing[10],
-    gap: Spacing[4],
+    paddingTop: Spacing[1],
+    paddingBottom: Spacing[8],
+    gap: Spacing[3],
+  },
+  gameLayout: {
+    width: '100%',
+    alignItems: 'center',
+    gap: Spacing[3],
   },
   settingsPanel: {
     width: '100%',
-    maxWidth: 420,
-    padding: Spacing[4],
-    borderRadius: Radius.lg,
+    maxWidth: 380,
+    padding: Spacing[3],
+    borderRadius: 6,
   },
   settingLabel: {
     fontFamily: Fonts.heading,
-    fontSize: FontSize.xs,
-    color: Colors.text.muted,
-    letterSpacing: 2,
-    marginBottom: Spacing[2],
+    fontSize: FontSize['2xs'],
+    color: '#94A3B8',
+    letterSpacing: 1,
+    marginBottom: Spacing[1],
   },
   segmented: {
     flexDirection: 'row',
@@ -467,58 +487,59 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing[2],
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    borderRadius: Radius.full,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 4,
+    backgroundColor: '#161522',
   },
   segText: {
     fontFamily: Fonts.heading,
-    fontSize: FontSize.sm,
-    color: Colors.text.muted,
+    fontSize: FontSize['2xs'],
+    color: '#94A3B8',
     letterSpacing: 0.5,
   },
   statusBar: {
     flexDirection: 'row',
-    gap: Spacing[3],
+    gap: Spacing[2],
     justifyContent: 'center',
     width: '100%',
-    maxWidth: 420,
+    maxWidth: 380,
   },
   statusPill: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: Radius.full,
-    paddingHorizontal: Spacing[3],
     paddingVertical: Spacing[2],
-    gap: Spacing[2],
-    borderWidth: 1,
-    borderColor: 'transparent',
+    borderRadius: 4,
+    gap: Spacing[1],
   },
-  statusIcon: { fontSize: 13 },
+  statusIcon: {
+    fontSize: FontSize.xs,
+  },
   statusValue: {
-    fontFamily: Fonts.bodySemiBold,
-    fontSize: FontSize.sm,
-    color: Colors.text.secondary,
+    fontFamily: Fonts.heading,
+    fontSize: FontSize.xs,
+    color: Colors.text.primary,
   },
-  gameLayout: {
-    flexDirection: 'column',
+  boardFrame: {
     alignItems: 'center',
-    gap: Spacing[6],
-    width: '100%',
-  },
-  boardWrapper: {
-    borderRadius: Radius.sm,
-    overflow: 'hidden',
-    borderWidth: 1.5,
-    borderColor: `${ACCENT_PURPLE}90`,
-    ...elegantShadow(0.4, 15, 8, ACCENT_PURPLE),
+    justifyContent: 'center',
+    padding: 3,
+    backgroundColor: '#12111A',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.10)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 4,
   },
   board: {
-    backgroundColor: BOARD_BG,
+    backgroundColor: '#0E0D16',
     borderLeftWidth: 0.5,
     borderTopWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.06)',
+    borderColor: 'rgba(255, 255, 255, 0.06)',
   },
   cellText: {
     fontFamily: Fonts.heading,
@@ -527,9 +548,7 @@ const styles = StyleSheet.create({
     color: Colors.text.primary,
   },
   cellUser: {
-    color: ACCENT_BLUE,
-    textShadowColor: ACCENT_BLUE,
-    textShadowRadius: 4,
+    color: '#38BDF8',
   },
   cellError: {
     color: DANGER,
@@ -540,7 +559,34 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     alignItems: 'center',
     width: '100%',
-    maxWidth: 420,
+    maxWidth: 380,
+    gap: Spacing[2],
+  },
+  numberPad: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    gap: 4,
+  },
+  numKey: {
+    flex: 1,
+    height: 38,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.10)',
+    backgroundColor: '#161522',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  numKeyText: {
+    fontFamily: Fonts.heading,
+    fontSize: FontSize.xs,
+    color: '#F4F4F5',
   },
   toolbar: {
     flexDirection: 'row',
@@ -550,53 +596,53 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   toolBtn: {
-    borderRadius: Radius.sm,
-    paddingVertical: Spacing[3],
+    borderRadius: 4,
+    paddingVertical: Spacing[2],
     paddingHorizontal: Spacing[2],
     alignItems: 'center',
     justifyContent: 'center',
     flex: 1,
-    minWidth: 55,
+    minWidth: 50,
   },
   toolBtnDisabled: {
     opacity: 0.35,
   },
   toolBtnIcon: {
-    fontSize: 16,
+    fontSize: 14,
     color: Colors.text.primary,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   toolBtnLabel: {
-    fontFamily: Fonts.bodySemiBold,
-    fontSize: 9,
+    fontFamily: Fonts.heading,
+    fontSize: 7,
     color: Colors.text.muted,
     letterSpacing: 0.5,
   },
   kbHint: {
     fontFamily: Fonts.body,
-    fontSize: FontSize.xs,
+    fontSize: FontSize['2xs'],
     color: Colors.text.muted,
     textAlign: 'center',
     marginTop: Spacing[1],
   },
   pauseOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(8, 15, 30, 0.95)',
+    backgroundColor: 'rgba(7, 5, 14, 0.95)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 100,
   },
   pausedTitle: { 
     fontFamily: Fonts.heading, 
-    fontSize: FontSize['2xl'], 
+    fontSize: FontSize.xl, 
     color: '#A855F7',
     textShadowColor: '#6B21A8',
     textShadowRadius: 10,
-    letterSpacing: 4 
+    letterSpacing: 3 
   },
   pausedSub: { 
     fontFamily: Fonts.body, 
-    fontSize: FontSize.sm, 
+    fontSize: FontSize.xs, 
     color: '#E0E7FF',
     opacity: 0.8, 
     marginTop: Spacing[2] 
@@ -605,21 +651,21 @@ const styles = StyleSheet.create({
     marginTop: Spacing[6], 
     paddingVertical: Spacing[3], 
     paddingHorizontal: Spacing[6],
-    borderRadius: Radius.md,
-    backgroundColor: '#1E1B4B',
-    borderWidth: 1.5,
-    borderColor: '#6B21A8',
+    borderRadius: 4,
+    backgroundColor: '#07050E',
+    borderWidth: 2,
+    borderColor: '#A855F7',
     shadowColor: '#A855F7',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 10,
     elevation: 5,
     alignItems: 'center',
     justifyContent: 'center'
   },
   resumeBtnText: {
     fontFamily: Fonts.heading,
-    fontSize: FontSize.md,
+    fontSize: FontSize.sm,
     color: '#38BDF8',
     letterSpacing: 2,
   }
